@@ -1,3 +1,9 @@
+--
+-- Helper Threads Toolkit
+-- (c) 2006 Javier Guerra G.
+-- $Id: test.lua,v 1.2 2006-03-11 00:28:40 jguerra Exp $
+--
+
 require "helper"
 timer = require "timer"
 

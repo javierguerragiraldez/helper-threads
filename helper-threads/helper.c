@@ -1,3 +1,9 @@
+/*
+ * Helper Threads Toolkit
+ * (c) 2006 Javier Guerra G.
+ * $Id: helper.c,v 1.2 2006-03-11 00:25:12 jguerra Exp $
+ */
+
 #include <stdlib.h>
 #include <string.h>
 

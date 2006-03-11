@@ -1,4 +1,8 @@
-
+/*
+ * Helper Threads Toolkit
+ * (c) 2006 Javier Guerra G.
+ * $Id: helper.h,v 1.2 2006-03-11 00:28:40 jguerra Exp $
+ */
 
 typedef struct task_ops {
 	int (*prepare) (lua_State *L, void **udata);
