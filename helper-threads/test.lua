@@ -1,7 +1,7 @@
 --
 -- Helper Threads Toolkit
 -- (c) 2006 Javier Guerra G.
--- $Id: test.lua,v 1.2 2006-03-11 00:28:40 jguerra Exp $
+-- $Id: test.lua,v 1.3 2006-03-13 13:13:57 jguerra Exp $
 --
 
 require "helper"
@@ -34,11 +34,11 @@ tx=q2:wait()
 print ("tx:", tx);
 print ("state:", helper.state (tx))
 print ("t1:", helper.state (t1), "t2:", helper.state (t2))
-helper.finish (tx)
+helper.update (tx)
 
 tx=q2:wait()
 print ("tx:", tx);
 print ("state:", helper.state (tx))
 print ("t1:", helper.state (t1), "t2:", helper.state (t2))
-helper.finish (tx)
+helper.update (tx)
 
