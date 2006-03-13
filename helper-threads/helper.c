@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.3 2006-03-13 05:48:34 jguerra Exp $
+ * $Id: helper.c,v 1.4 2006-03-13 11:43:35 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -47,6 +47,7 @@ typedef struct thread_t {
 	pthread_t pth;
 	queue_t *in;
 	queue_t *out;
+	task_t *task;
 	int signal;
 } thread_t;
 
@@ -370,7 +371,7 @@ static int queue_gc (lua_State *L) {
 }
 
 static pthread_key_t thread_key;
-static pthread_key_t task_key;
+/*static pthread_key_t task_key;*/
 
 static void *thread_work (void *arg) {
 	thread_t *thrd = (thread_t *)arg;
@@ -382,7 +383,7 @@ static void *thread_work (void *arg) {
 	while (!thrd->signal) {
 		task_t *t = q_wait (thrd->in);
 		if (t) {
-			pthread_setspecific (task_key, t);
+			thrd->task = t;
 			t->state = TSK_BUSY;
 			if (t->ops && t->ops->work)
 				t->ops->work (t->udata);
@@ -466,7 +467,7 @@ static void add_helperfunc_st (lua_State *L, task_ops *ops) {
 
 static void signal_task_st (int pause) {
 	thread_t *thrd = (thread_t *)pthread_getspecific (thread_key);
-	task_t *t = (task_t *)pthread_getspecific (task_key);
+	task_t *t = thrd->task;
 	
 	pthread_mutex_lock (&t->lock);
 	
@@ -517,7 +518,6 @@ int luaopen_helper (lua_State *L);
 int luaopen_helper (lua_State *L)
 {
 	pthread_key_create (&thread_key, NULL);
-	pthread_key_create (&task_key, NULL);
 	
 	luaL_newmetatable(L, QueueType);
 	lua_pushliteral(L, "__index");
