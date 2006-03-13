@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: timer.c,v 1.2 2006-03-11 00:28:40 jguerra Exp $
+ * $Id: timer.c,v 1.3 2006-03-13 22:08:55 jguerra Exp $
  */
 
 #include <sys/time.h>
@@ -13,6 +13,10 @@
 
 #include "helper.h"
 
+/*
+ * one shot timer
+ */
+ 
 typedef struct timer_udata {
 	struct timeval tv;
 	int ret;
@@ -39,9 +43,7 @@ static int timer_work (void *udata) {
 	FD_ZERO (&fd_b);
 	FD_ZERO (&fd_c);
 	
-	/* printf ("[before select]\n"); */
 	td->ret = select (0, &fd_a, &fd_b, &fd_c, &td->tv);
-	/* printf ("[after select]\n"); */
 	
 	return 0;
 }
@@ -57,16 +59,95 @@ static int timer_finish (lua_State *L, void *udata) {
 	return 0;
 }
 
-static task_ops timer_ops = {
+static const task_ops timer_ops = {
 	timer_prepare,
 	timer_work,
 	timer_finish
+};
+
+
+/*
+ * repated ticks timer
+ */
+
+typedef struct ticks_udata {
+	lua_Number t;
+	/*	struct timeval tv;*/
+	int ret, end;
+} ticks_udata;
+
+static int ticks_prepare (lua_State *L, void **udata) {
+	lua_Number t = luaL_checknumber (L, 1);
+	ticks_udata *td = (ticks_udata *)malloc (sizeof (ticks_udata));
+	if (!td)
+		luaL_error (L, "can't alloc udata");
+	
+	td->t = t;
+	td->end = 0;
+	
+	*udata = td;
+	
+	return 0;
+}
+
+static int ticks_work (void *udata) {
+	ticks_udata *td = (ticks_udata *)udata;
+	fd_set fd_a, fd_b, fd_c;
+	struct timeval tv;
+	
+	FD_ZERO (&fd_a);
+	FD_ZERO (&fd_b);
+	FD_ZERO (&fd_c);
+	
+	while (!td->end) {
+	
+		tv.tv_sec = (int) td->t;
+		tv.tv_usec = (td->t - tv.tv_sec) * 1000000;
+		
+		td->ret = select (0, &fd_a, &fd_b, &fd_c, &tv);
+		signal_task (0);
+	}
+	
+	return 0;
+}
+
+static int ticks_update (lua_State *L, void *udata) {
+	ticks_udata *td = (ticks_udata *)udata;
+	
+	if (td->end) {
+		if (td->ret < 0)
+			luaL_error (L, strerror (td->ret));
+		free (td);
+		
+	} else {
+		if (lua_isnumber (L, 1)) {
+			td->t = lua_tonumber(L, 1);
+			if (td->t < 0)
+				td->end = 1;
+		}
+	}
+	
+	return 0;
+}
+
+static const task_ops ticks_ops = {
+	ticks_prepare,
+	ticks_work,
+	ticks_update
+};
+
+static const task_reg timer_reg[] = {
+	{"timer", &timer_ops},
+	{"ticks", &ticks_ops},
+	{NULL}
 };
 
 int luaopen_timer (lua_State *L);
 int luaopen_timer (lua_State *L) {
 
 	helper_init (L);
-	add_helperfunc (L, &timer_ops);
+
+	tasklib (L, "timer", timer_reg);
+	
 	return 1;
 }
