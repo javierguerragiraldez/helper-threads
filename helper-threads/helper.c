@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.4 2006-03-13 11:43:35 jguerra Exp $
+ * $Id: helper.c,v 1.5 2006-03-13 22:09:50 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -390,6 +390,7 @@ static void *thread_work (void *arg) {
 			tsk_setstate (t, TSK_DONE);
 		}
 		q_push (thrd->out, t);
+		thrd->task = NULL;
 	}
 	return NULL;
 }
@@ -460,10 +461,31 @@ static int task_init (lua_State *L) {
 	return ret+1;
 }
 
-static void add_helperfunc_st (lua_State *L, task_ops *ops) {
-	lua_pushlightuserdata (L, ops);
+static void add_helperfunc_st (lua_State *L, const task_ops *ops) {
+	lua_pushlightuserdata (L, (void *)ops);
 	lua_pushcclosure (L, task_init, 1);
 }
+
+static void tasklib_st (lua_State *L, const char *libname, const task_reg *l) {
+	if (libname) {
+		lua_pushstring (L, libname);
+		lua_gettable (L, LUA_GLOBALSINDEX);  /* check whether lib already exists */
+		if (lua_isnil (L, -1)) {  /* no? */
+			lua_pop (L, 1);
+			lua_newtable (L);  /* create it */
+			lua_pushstring (L, libname);
+			lua_pushvalue (L, -2);
+			lua_settable (L, LUA_GLOBALSINDEX);  /* register it with given name */
+		}
+	}
+	for (; l->name; l++) {
+		lua_pushstring(L, l->name);
+		add_helperfunc_st (L, l->ops);
+		lua_settable (L, -3);
+	}
+}
+
+
 
 static void signal_task_st (int pause) {
 	thread_t *thrd = (thread_t *)pthread_getspecific (thread_key);
@@ -487,6 +509,10 @@ static void setCAPI (lua_State *L) {
 	
 	lua_pushliteral (L, "add_helperfunc");
 	lua_pushlightuserdata (L, (void *)add_helperfunc_st);
+	lua_settable (L, -3);
+	
+	lua_pushliteral (L, "tasklib");
+	lua_pushlightuserdata (L, (void *)tasklib_st);
 	lua_settable (L, -3);
 	
 	lua_pushliteral (L, "signal_task");
