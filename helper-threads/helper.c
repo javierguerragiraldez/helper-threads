@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.2 2006-03-11 00:25:12 jguerra Exp $
+ * $Id: helper.c,v 1.3 2006-03-13 05:48:34 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -21,6 +21,7 @@ typedef enum {
 	TSK_NULL,
 	TSK_READY,
 	TSK_BUSY,
+	TSK_PAUSED,
 	TSK_DONE,
 	TSK_FINISHED
 } task_state;
@@ -29,6 +30,8 @@ typedef struct task_t {
 	const char *type;
 	struct task_t *next;
 	task_state state;
+	pthread_mutex_t lock;
+	pthread_cond_t unpaused;
 	task_ops *ops;
 	void *udata;
 } task_t;
@@ -143,6 +146,18 @@ static void q_free (queue_t *q) {
 }
 
 /*
+ * task handling funcions
+ */
+static void tsk_setstate (task_t *t, task_state state) {
+	pthread_mutex_lock (&t->lock);
+	t->state = state;
+	if (state != TSK_PAUSED)
+		pthread_cond_broadcast (&t->unpaused);
+	
+	pthread_mutex_unlock (&t->lock);
+}
+
+/*
  *  userdata types functions
  */
 
@@ -198,6 +213,8 @@ static task_t *new_task (lua_State *L) {
 	t->type = TaskType;
 	t->next = NULL;
 	t->state = TSK_NULL;
+	pthread_mutex_init (&t->lock, NULL);
+	pthread_cond_init (&t->unpaused, NULL);
 	
 	lua_pushlightuserdata (L, t);
 	return t;
@@ -205,9 +222,45 @@ static task_t *new_task (lua_State *L) {
 
 
 /*
- * helper.finish (task)
+ * helper.update (task)
  */
-static int task_finish (lua_State *L) {
+static int task_update (lua_State *L) {
+	int ret = 0;
+	task_state nxtstate;
+	
+	task_t *t = check_task (L, 1);
+	lua_remove (L, 1);
+	if (!t)
+		return 0;
+	
+	pthread_mutex_lock (&t->lock);
+	
+	switch (t->state) {
+		case TSK_BUSY:
+		case TSK_PAUSED:
+			nxtstate = TSK_BUSY;
+			break;
+		case TSK_DONE:
+			nxtstate = TSK_FINISHED;
+			break;
+		default:
+			luaL_error (L, "the task is in the wrong state");
+			return 0;
+	}
+	
+	if (t && t->ops && t->ops->update)
+		ret = t->ops->update (L, t->udata);
+	t->state = nxtstate;
+	if (t->state == TSK_FINISHED)
+		free (t);
+	
+	pthread_mutex_unlock (&t->lock);
+	return ret;
+	
+	
+	
+	
+#if 0
 	int ret = 0;
 	task_t *t = check_task (L, 1);
 	lua_remove (L, 1);
@@ -221,6 +274,7 @@ static int task_finish (lua_State *L) {
 	
 	free (t);
 	return ret;
+#endif
 }
 
 /*
@@ -244,6 +298,9 @@ static int state (lua_State *L) {
 			break;
 		case TSK_BUSY:
 			s = "Busy";
+			break;
+		case TSK_PAUSED:
+			s = "Paused";
 			break;
 		case TSK_DONE:
 			s = "Done";
@@ -312,17 +369,24 @@ static int queue_gc (lua_State *L) {
 	return 0;
 }
 
+static pthread_key_t thread_key;
+static pthread_key_t task_key;
+
 static void *thread_work (void *arg) {
 	thread_t *thrd = (thread_t *)arg;
 	if (!thrd || !thrd->in || !thrd->out)
 		return NULL;
+	
+	pthread_setspecific (thread_key, arg);
+	
 	while (!thrd->signal) {
 		task_t *t = q_wait (thrd->in);
 		if (t) {
+			pthread_setspecific (task_key, t);
 			t->state = TSK_BUSY;
 			if (t->ops && t->ops->work)
 				t->ops->work (t->udata);
-			t->state = TSK_DONE;
+			tsk_setstate (t, TSK_DONE);
 		}
 		q_push (thrd->out, t);
 	}
@@ -375,7 +439,7 @@ static const struct luaL_reg thread_meths [] = {
 	{NULL, NULL}
 };
 static const struct luaL_reg helper_funcs [] = {
-	{"finish", task_finish},
+	{"update", task_update},
 	{"state", state},
 	{"newqueue", new_queue},
 	{"newthread", new_thread},
@@ -391,7 +455,7 @@ static int task_init (lua_State *L) {
 	t->ops = ops;
 	if (ops && ops->prepare)
 		ret = ops->prepare (L, &t->udata);
-	t->state = TSK_READY;
+	tsk_setstate (t, TSK_READY);
 	return ret+1;
 }
 
@@ -400,12 +464,32 @@ static void add_helperfunc_st (lua_State *L, task_ops *ops) {
 	lua_pushcclosure (L, task_init, 1);
 }
 
+static void signal_task_st (int pause) {
+	thread_t *thrd = (thread_t *)pthread_getspecific (thread_key);
+	task_t *t = (task_t *)pthread_getspecific (task_key);
+	
+	pthread_mutex_lock (&t->lock);
+	
+	q_push (thrd->out, t);
+	if (pause) {
+		t->state = TSK_PAUSED;
+		while (t->state == TSK_PAUSED)
+			pthread_cond_wait (&t->unpaused, &t->lock);
+	}
+	
+	pthread_mutex_unlock (&t->lock);
+}
+
 static void setCAPI (lua_State *L) {
 	lua_pushliteral (L, "_API");
 	lua_newtable (L);
 	
 	lua_pushliteral (L, "add_helperfunc");
 	lua_pushlightuserdata (L, (void *)add_helperfunc_st);
+	lua_settable (L, -3);
+	
+	lua_pushliteral (L, "signal_task");
+	lua_pushlightuserdata (L, (void *)signal_task_st);
 	lua_settable (L, -3);
 	
 	lua_settable (L, -3);
@@ -432,6 +516,9 @@ static void set_info (lua_State *L) {
 int luaopen_helper (lua_State *L);
 int luaopen_helper (lua_State *L)
 {
+	pthread_key_create (&thread_key, NULL);
+	pthread_key_create (&task_key, NULL);
+	
 	luaL_newmetatable(L, QueueType);
 	lua_pushliteral(L, "__index");
 	lua_pushvalue(L, -2);
