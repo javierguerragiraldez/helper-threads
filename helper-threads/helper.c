@@ -1,17 +1,46 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.5 2006-03-13 22:09:50 jguerra Exp $
+ * $Id: helper.c,v 1.6 2006-03-14 16:39:04 jguerra Exp $
  */
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
 #include "pthread.h"
 
 #include "helper.h"
+
+#ifndef NUMBER_TO_TIMESPEC
+#define NUMBER_TO_TIMESPEC(f, ts)								\
+	do {														\
+		(ts)->tv_sec = (int) (f);								\
+		(ts)->tv_nsec = ((f) - (ts)->tv_sec) * 1000000000;		\
+	} while (0)
+#endif
+
+#ifndef TIMEVAL_TO_TIMESPEC
+# define TIMEVAL_TO_TIMESPEC(tv, ts) {						\
+	(ts)->tv_sec = (tv)->tv_sec;							\
+	(ts)->tv_nsec = (tv)->tv_usec * 1000;					\
+}
+#endif
+
+#ifndef timeradd
+# define timeradd(a, b, result)								\
+	do {													\
+		(result)->tv_sec = (a)->tv_sec + (b)->tv_sec;		\
+		(result)->tv_nsec = (a)->tv_nsec + (b)->tv_nsec;	\
+		if ((result)->tv_nsec >= 1000000000) {				\
+			++(result)->tv_sec;								\
+			(result)->tv_nsec -= 1000000000;				\
+		}													\
+	} while (0)
+#endif
+
 
 static const char TaskType[] = "__HelperTaskType__";
 static const char QueueType[] = "__HelperQueueType__";
@@ -20,6 +49,7 @@ static const char ThreadType[] = "__HelperThreadType__";
 typedef enum {
 	TSK_NULL,
 	TSK_READY,
+	TSK_WAITING,
 	TSK_BUSY,
 	TSK_PAUSED,
 	TSK_DONE,
@@ -51,9 +81,9 @@ typedef struct thread_t {
 	int signal;
 } thread_t;
 
-/*
+/********************************************
  * thread-safe FIFO queue functions
- */
+ *******************************************/
 
 static void q_init (queue_t *q) {
 	q->head = NULL;
@@ -63,7 +93,6 @@ static void q_init (queue_t *q) {
 }
 
 static void q_push (queue_t *q, task_t *t) {
-	
 	if (!q || !t)
 		return;
 	
@@ -79,6 +108,33 @@ static void q_push (queue_t *q, task_t *t) {
 		q->head = t;
 	
 	pthread_cond_broadcast (&q->notempty);
+	pthread_mutex_unlock (&q->lock);
+}
+
+static task_t *q_remove (queue_t *q, task_t *t) {
+	task_t *p;
+	if (!q || !t)
+		return NULL;
+	
+	pthread_mutex_lock (&q->lock);
+	
+	if (q->head == t) {
+		q->head = t->next;
+		if (!q->head)
+			q->tail = NULL;
+		return t;
+	}
+	for (p = q->head; p; p = p->next) {
+		if (p->next == t) {
+			p->next = t->next;
+			if (q->tail == t)
+				q->tail = p;
+			return t;
+		}
+	}
+	
+	return NULL;
+	
 	pthread_mutex_unlock (&q->lock);
 }
 
@@ -104,27 +160,33 @@ static task_t *q_pop (queue_t *q) {
 	return t;
 }
 
-static task_t *q_wait (queue_t *q) {
+static task_t *q_wait (queue_t *q, const struct timespec *timeout) {
+	int ret = 0;
 	task_t *t = NULL;
 	
 	if (!q)
 		return NULL;
 	
 	pthread_mutex_lock (&q->lock);
-	while (q->head == NULL)
-		pthread_cond_wait (&q->notempty, &q->lock);
-	
-	t = q->head;
-	if (t) {
-		q->head = t->next;
-		t->next = NULL;
+	while (q->head == NULL) {
+		if (timeout)
+			ret = pthread_cond_timedwait (&q->notempty, &q->lock, timeout);
+		else
+			ret = pthread_cond_wait (&q->notempty, &q->lock);
 	}
 	
-	if (q->tail == t)
-		q->tail = NULL;
+	if (ret == 0) {
+		t = q->head;
+		if (t) {
+			q->head = t->next;
+			t->next = NULL;
+		}
+		
+		if (q->tail == t)
+			q->tail = NULL;
+	}
 	
 	pthread_mutex_unlock (&q->lock);
-	
 	return t;
 }
 
@@ -146,9 +208,9 @@ static void q_free (queue_t *q) {
 	pthread_mutex_destroy (&q->lock);
 }
 
-/*
+/******************************************
  * task handling funcions
- */
+ ******************************************/
 static void tsk_setstate (task_t *t, task_state state) {
 	pthread_mutex_lock (&t->lock);
 	t->state = state;
@@ -158,9 +220,9 @@ static void tsk_setstate (task_t *t, task_state state) {
 	pthread_mutex_unlock (&t->lock);
 }
 
-/*
+/*******************************************
  *  userdata types functions
- */
+ *******************************************/
 
 static task_t *check_task (lua_State *L, int index) {
 	task_t *t = NULL;
@@ -199,9 +261,9 @@ static thread_t *check_thread (lua_State *L, int index) {
 	return thrd;
 }
 
-/*
+/**************************************************
  *  task lua functions
- */
+ **************************************************/
 
 /*
  * helper.newtask ()
@@ -237,6 +299,12 @@ static int task_update (lua_State *L) {
 	pthread_mutex_lock (&t->lock);
 	
 	switch (t->state) {
+		case TSK_READY:
+			if (t->ops && t->ops->work)
+				t->ops->work (t->udata);
+			t->state = TSK_DONE;
+			nxtstate = TSK_FINISHED;
+			break;
 		case TSK_BUSY:
 		case TSK_PAUSED:
 			nxtstate = TSK_BUSY;
@@ -257,25 +325,6 @@ static int task_update (lua_State *L) {
 	
 	pthread_mutex_unlock (&t->lock);
 	return ret;
-	
-	
-	
-	
-#if 0
-	int ret = 0;
-	task_t *t = check_task (L, 1);
-	lua_remove (L, 1);
-	
-	if (t && t->state != TSK_DONE)
-		luaL_error (L, "the task isn't 'Done'");
-	
-	if (t && t->ops && t->ops->finish)
-		ret =  t->ops->finish (L, t->udata);
-	t->state = TSK_FINISHED;
-	
-	free (t);
-	return ret;
-#endif
 }
 
 /*
@@ -296,6 +345,9 @@ static int state (lua_State *L) {
 			break;
 		case TSK_READY:
 			s = "Ready";
+			break;
+		case TSK_WAITING:
+			s = "Waiting";
 			break;
 		case TSK_BUSY:
 			s = "Busy";
@@ -334,8 +386,23 @@ static int queue_addtask (lua_State *L) {
 	task_t *t = check_task (L, 2);
 	if (t && t->state != TSK_READY)
 		luaL_error (L, "task not 'Ready'");
+	tsk_setstate (t, TSK_WAITING);
 	q_push (q, t);
 	return 0;
+}
+
+/*
+ * queue:remove (task)
+ */
+static int queue_removetask (lua_State *L) {
+	queue_t *q = check_queue (L, 1);
+	task_t *t = check_task (L, 2);
+	
+	if (q_remove (q, t)) {
+		tsk_setstate (t, TSK_READY);
+		return 1;
+	} else
+		return 0;
 }
 
 /*
@@ -352,12 +419,35 @@ static int queue_peek (lua_State *L) {
 }
 
 /*
- * queue:wait ()
+ * queue:wait ([timeout])
  */
 static int queue_wait (lua_State *L) {
 	queue_t *q = check_queue (L, 1);
-	task_t *t = q_wait (q);
-	lua_pushlightuserdata (L, t);
+	task_t *t = NULL;
+	
+	if (lua_isnoneornil (L, 2)) {
+		t = q_wait (q, NULL);
+		lua_pushlightuserdata (L, t);
+		
+	} else {
+		
+		struct timeval tv;
+		struct timespec ts, now;
+		
+		lua_Number timeout = lua_tonumber (L, 2);
+		NUMBER_TO_TIMESPEC (timeout, &ts);
+		
+		gettimeofday (&tv, NULL);
+		TIMEVAL_TO_TIMESPEC (&tv, &now)
+		timeradd (&ts, &now, &ts);
+		
+		t = q_wait (q, &ts);
+		if (t)
+			lua_pushlightuserdata (L, t);
+		else
+			return 0;
+	}
+
 	return 1;
 }
 
@@ -371,7 +461,6 @@ static int queue_gc (lua_State *L) {
 }
 
 static pthread_key_t thread_key;
-/*static pthread_key_t task_key;*/
 
 static void *thread_work (void *arg) {
 	thread_t *thrd = (thread_t *)arg;
@@ -381,7 +470,7 @@ static void *thread_work (void *arg) {
 	pthread_setspecific (thread_key, arg);
 	
 	while (!thrd->signal) {
-		task_t *t = q_wait (thrd->in);
+		task_t *t = q_wait (thrd->in, NULL);
 		if (t) {
 			thrd->task = t;
 			t->state = TSK_BUSY;
@@ -431,6 +520,7 @@ static int thread_gc (lua_State *L) {
 
 static const struct luaL_reg queue_meths [] = {
 	{"addtask", queue_addtask},
+	{"remove", queue_removetask},
 	{"peek", queue_peek},
 	{"wait", queue_wait},
 	{"__gc", queue_gc},
@@ -448,7 +538,9 @@ static const struct luaL_reg helper_funcs [] = {
 	{NULL, NULL}
 };
 
-/* C API */
+/************************************************
+ * C API
+ ***********************************************/
 static int task_init (lua_State *L) {
 	int ret = 0;
 	
@@ -502,6 +594,10 @@ static void signal_task_st (int pause) {
 	
 	pthread_mutex_unlock (&t->lock);
 }
+
+/*******************************************************
+ * Initialization
+ *******************************************************/
 
 static void setCAPI (lua_State *L) {
 	lua_pushliteral (L, "_API");
