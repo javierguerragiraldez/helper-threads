@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.6 2006-03-14 16:39:04 jguerra Exp $
+ * $Id: helper.c,v 1.7 2006-03-18 01:42:29 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -595,9 +595,55 @@ static void signal_task_st (int pause) {
 	pthread_mutex_unlock (&t->lock);
 }
 
+/********************************************
+ * null task
+ ********************************************/
+static int null_prepare (lua_State *L, void **udata) {
+	*udata = NULL;
+	return 0;
+}
+
+static int null_work (void *udata) {
+	return 0;
+}
+
+static int null_update (lua_State *L, void *udata) {
+	return 0;
+}
+
+static task_ops null_task = {
+	null_prepare,
+	null_work,
+	null_update
+};
+
 /*******************************************************
  * Initialization
  *******************************************************/
+
+/*
+** Assumes the table is on top of the stack.
+*/
+static void set_info (lua_State *L) {
+	lua_pushliteral (L, "_COPYRIGHT");
+	lua_pushliteral (L, "Copyright (C) 2006 Javier Guerra");
+	lua_settable (L, -3);
+	lua_pushliteral (L, "_DESCRIPTION");
+	lua_pushliteral (L, "a helper threads middle layer");
+	lua_settable (L, -3);
+	lua_pushliteral (L, "_NAME");
+	lua_pushliteral (L, "helper");
+	lua_settable (L, -3);
+	lua_pushliteral (L, "_VERSION");
+	lua_pushliteral (L, "0.1");
+	lua_settable (L, -3);
+}
+
+static void set_tasks (lua_State *L) {
+	lua_pushliteral (L, "null");
+	add_helperfunc_st (L, &null_task);
+	lua_settable (L, -3);
+}
 
 static void setCAPI (lua_State *L) {
 	lua_pushliteral (L, "_API");
@@ -615,24 +661,6 @@ static void setCAPI (lua_State *L) {
 	lua_pushlightuserdata (L, (void *)signal_task_st);
 	lua_settable (L, -3);
 	
-	lua_settable (L, -3);
-}
-
-/*
-** Assumes the table is on top of the stack.
-*/
-static void set_info (lua_State *L) {
-	lua_pushliteral (L, "_COPYRIGHT");
-	lua_pushliteral (L, "Copyright (C) 2006 Javier Guerra");
-	lua_settable (L, -3);
-	lua_pushliteral (L, "_DESCRIPTION");
-	lua_pushliteral (L, "a helper threads middle layer");
-	lua_settable (L, -3);
-	lua_pushliteral (L, "_NAME");
-	lua_pushliteral (L, "helper");
-	lua_settable (L, -3);
-	lua_pushliteral (L, "_VERSION");
-	lua_pushliteral (L, "0.1");
 	lua_settable (L, -3);
 }
 
@@ -654,6 +682,7 @@ int luaopen_helper (lua_State *L)
 	luaL_openlib (L, NULL, thread_meths, 0);
 	
 	luaL_openlib (L, "helper", helper_funcs, 0);
+	set_tasks (L);
 	set_info (L);
 	setCAPI (L);
 
