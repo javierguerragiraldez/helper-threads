@@ -1,3 +1,9 @@
+/*
+ * Helper Threads Toolkit
+ * (c) 2006 Javier Guerra G.
+ * $Id: nb_file.c,v 1.2 2006-03-18 01:44:49 jguerra Exp $
+ */
+ 
 #include <stdlib.h>
 #include <stdio.h>
 
