@@ -1,0 +1,332 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html>
+
+<head>
+<meta name="description" content="The Helper Threads Toolkit Homepage">
+<meta name="keywords" content="Lua, Library, Multi-Threading, Threads, Support">
+<title>Helper Threads: Building blocks for non-blocking libraries.
+</title>
+<link rel="stylesheet" href="reference.css" type="text/css">
+</head>
+
+<body>
+
+<!-- header +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
+
+<div class=header>
+<hr />
+<p><center>
+<table summary="Lua logo">
+<tr><td align=center><a href="http://www.lua.org">
+<img src="logo.gif" alt="Lua" width="128" height="128" align="middle" border="0">
+</a></td></tr>
+<tr><td align=center valign=top>Helper Threads: Building blocks for non-blocking libraries.
+</td></tr>
+</table>
+<p class=bar>
+<a href="home.html#download">download</a> &middot;
+<a href="installation.html">installation</a>  &middot;
+<a href="examples.html">examples</a>  &middot;
+<a href="reference.html">reference</a> 
+</p>
+</center></p>
+<hr />
+</div>
+
+<!-- whatis +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
+
+<h2 id=whatis>What is the Helper Threads Toolkit?</h2>
+
+<p>It's a library to help developers build libraries. More specifically, to build
+	non-blocking libraries.
+</p>
+
+<h2 id="concepts">Concepts:</h2>
+
+<h3>Task</h3>
+<p>A task is an action that could be time-consuming, therefore it's separated
+	in four steps: Preparation, Work, Update(s) and Finishing.
+</p>
+<p>The first step creates an object (what I call a task object) to identify it
+	at the other three steps. The second step, Work, occurs in background; without
+	blocking the main Lua execution. The third step, Update, can occur any number
+	of times (including zero times), as needed by the Work process. Finally, the
+	Finishing step is in fact the only Update done after the Work step finishes, it
+	occurs exactly once and the task is disposed.
+</p>
+
+<h3>Queue</h3>
+<p>These are First-In, First-Out (FIFO) queues holding task objects. A task is added
+	at the end of the queue with <code>queue:addtask(task)</code>, and retrieved at the front with
+	<code>queue:wait([timeout])</code>.
+</p>
+
+<p>There are two types of queues: input queues, where prepared tasks are added;
+	and output queues, where tasks are added by the threads to notify its completion or any
+	intermediate event.
+</p>
+
+<h3>Thread</h3>
+<p>A thread is a separate execution context. It's only for C code and it can't touch
+	or access the Lua state. This restriction makes the library much simpler, and
+	improves performance significatively. Each thread has an input queue and an output
+	queue, either one can be shared by several threads. 
+</p>
+
+<p>During execution, a thread waits on it's input queue for a task. When it gets one,
+	it calls it's work function. After that function returns, marks the task as "Done" and
+	puts it in it's output queue. Finally, returns to waiting on the input queue and repeats
+	it all over again.
+</p>
+
+<h3>Preparation</h3>
+<p>To start a task, it has to get some parameters about the work to be performed. Also,
+	it usually have to allocate some memory to hold these parameters and any result.
+	All this is done in the "Preparation" step, and ends returning the task object to
+	the calling Lua code.
+</p>
+
+<h3>Work</h3>
+<p>This is where all get's done. It's the time-consuming step wich we want to avoid
+	blocking the Lua code.
+</p>
+<p>When a thread picks a task from its input queue, the task's work function is called.
+	This function does all the work according to the parameters collected at the "Preparation"
+	step.
+</p>
+<p>Since this function is called in a separate execution context, it can't directly
+	interact with the Lua code; but if needed it can signal an event, making the unfinished
+	task object to appear in the output queue. This signalling is optional, and can be
+	repeated as many times as needed. There's also the option to pause the thread until
+	the task is 'Updated'.
+</p>
+
+<h3>Update(s)</h3>
+<p>When the task object appears in the output queue, the Lua code should do an 'update'
+	on the task.  This is an oportunity for the C library to interact with the running Lua
+	code.  These updates should be brief, just to copy some data and/or state between the
+	two contexts.
+</p>
+<p>The task's work function initiates these interactions making the task object appear
+	in the output queue, optionally blocking itself until the Lua code responds. In this
+	case, the thread is resumed as soon as the update is done.
+</p>
+
+<h3>Finishing</h3>
+<p>This step doesn't have it's own API functions; it's just the last update. When the
+	work function finishes, the helper library automatically puts the task object in the
+	output queue, with a state of "Done"; and after the Lua code calls the update function,
+	the task is considered "Finished" and disposed.
+</p>
+<p>This is where most libraries will return data from the work just finished to the
+	calling Lua code.
+</p>
+
+<h2 id="luaapi">The Lua API:</h2>
+
+<p>Note that this API doesn't provide a function to create a task object. These are
+	created by C libraries that use the Helper Thread Toolkit. For example, the
+	<code>nb_file.read(file, len)</code> function (part of the sample "nb_file" library)
+	creates and returns a task object that identifies the read operation and encapsulates
+	the given parameters <code>file</code> and <code>len</code>.
+</p>
+<p>In most cases, these functions would be called by a Lua dispatcher; that is, some
+	Lua framework that manages several Lua threads of execution using coroutines or maybe
+	some other methods.
+</p>
+
+<h3><code>helper.newqueue ()</code></h3>
+<p>Returns a newly created queue object.
+</p>
+
+<h3><code>helper.newthread (input, output)</code></h3>
+<p>Returns a newly created thread object. It's spawned and running, so if the input
+	queue has task objects in it, they'll be executed ASAP. Either or both queues can
+	be shared with other threads.
+</p>
+<p> If more than one thread have the same input queue,
+	you can't predict wich one will execute a given task. If the input thread is used by
+	only one thread, the tasks will be executed sequentially, with no reordering.
+</p>
+<p>Each task will be added to the output queue, where the Lua code can get them using
+	the <code>peek()</code> or <code>wait()</code> methods. If several threads have the
+	same output queue, a single <code>wait()</code> line could get events from all those
+	threads (a single task for each call, of course).
+</p>
+
+<h3><code>helper.update (task [, ...])</code></h3>
+<p>When a task appears at an output queue, the Lua code should respond calling this
+	function. The task's update handler (in the C library) has access to any extra parameters
+	given here, and can return any value(s) to the Lua code.
+</p>
+<p>If the task is in the "Done" state, this update will be the last one for this task;
+	and the task will be marked as "Finished" after this call, and eventually disposed.
+</p>
+<p>If the task is in the "Ready" state, it means it has been prepared; but it's not in
+	any queue, so it hasn't begun execution by any thread. In this case, the task is
+	executed immediatly and in a blocking manner. This makes easy for a Lua dispatcher to
+	'wrap' the task preparation functions and provide a simple blocking API over the
+	non-blocking one provided by the underlying C library.
+</p>
+
+<h3><code>helper.state (task)</code></h3>
+<p>Returns an string indicating the task's state. The possible results are:
+	<ul>
+		<li>"<code>NULL</code>" before the task preparation, shouldn't happen.</li>
+		<li>"<code>Ready</code>" after preparation, not on a queue.</li>
+		<li>"<code>Waiting</code>" the task is in a queue, waiting to be picked
+			by a thread.</li>
+		<li>"<code>Busy</code>" currently being executed by a thread.</li>
+		<li>"<code>Paused</code>" the thread has paused and put it in the output queue.
+			Maybe has some data for you, maybe needs some more data.
+			Call <code>helper.update (task [, ...])</code> to interact with it and
+			unpause the thread.</li>
+		<li>"<code>Done</code>", The task's work is done, call
+			<code>helper.update (task [, ...])</code> to get any result(s).</li>
+		<li>"<code>Finished</code>", It has fulfilled it's purpose in life and will
+			be soon disposed.</li>
+	</ul>
+</p>
+
+<h3><code>queue:addtask (task)</code></h3>
+<p>Use this function to add tasks to input queues. The task should be in the "Ready" state,
+	or it will be rejected. If the queue is currently empty and has a thread waiting on it,
+	the task would be immediatly picked and executed.
+</p>
+
+<h3><code>queue:remove (task)</code></h3>
+<p>Removes a task from the queue.  If it was in the "Waiting" state, it's returned
+	to the "Ready" state. Returns the given task if successful, or nil if not (maybe it
+	wasn't in this queue anymore).
+</p>
+
+<h3><code>queue:peek ()</code></h3>
+<p>Returns the front task of a queue, or nil if the queue was empty. Doesn't block nor
+	modify the queue in any way.
+</p>
+
+<h3><code>queue:wait ([timeout])</code></h3>
+<p>Removes and returns the front task from the queue. If the queue is empty, it waits at
+	most <code>timeout</code> seconds before returning nil. If no <code>timeout</code>
+	is given, blocks indefinitely until a task appears in the queue.
+</p>
+
+<h2 id="capi">The C API</h2>
+
+<p>This API is used by C programmers that use the Helper Threads Toolkit to create
+	non-blocking libraries. For each 'task-able' operation, the library writer has
+	to provide three C callback functions and register them as the task operations.
+</p>
+
+<h3><code>int (*prepare) (lua_State *L, void **udata)</code></h3>
+<p>This user-defined function is called in the main thread. It should get any needed
+	parameters from the Lua State, and set <code>*udata</code> to a pointer holding
+	any userdata associated with the task.
+</p>
+
+<h3><code>int (*work) (void *udata)</code></h3>
+<p>This callback is the one doing all the work. It gets called by the helper thread
+	and shouldn't touch or access in any way the Lua state. The <code>*udata</code>
+	provided is the same one set by <code>prepare()</code> for this task, it should
+	point to a private structure holding any parameter needed.
+</p>
+<p>One-shot tasks only need to do any work in this function, probably blocking on I/O,
+	and store any results in the userdata structure. When this function finishes, the
+	helper threads library will set the task's state to "Done" and put it in the output
+	queue, maybe waking up a waiting Lua code.
+</p>
+<p>Long-running tasks might want to signal events to the Lua code, maybe to return
+	some intermediate results or maybe to request some more data to work. Use the
+	<code>signal_task()</code> function for that.
+</p>
+
+<h3><code>int (*update) (lua_State *L, void *udata)</code></h3>
+<p>This callback is executed each time the Lua code calls the <code>helper.update(task)</code>
+	function. It's has access both to the Lua state (to get any extra parameter and/or
+	return any result) and to the task's userdata.
+</p>
+<p>After this function returns, the task state will be updated. If the task was in the
+	"Paused" state, it'll be reset to the "Busy" state and any waiting thread will be resumed.
+	If it was in the "Done" state (because the <code>work()</code> callback has already
+	returned), it'll be set to the "Finished" state and disposed soon.
+</p>
+
+<pre><h3><code>typedef struct task_ops {
+	int (*prepare) (lua_State *L, void **udata);
+	int (*work) (void *udata);
+	int (*update) (lua_State *L, void *udata);
+} task_ops;
+</code></h3></pre>
+
+<p>This struct holds the three callbacks for a task. Used in the
+	<code>add_helperfunc()</code> function and <code>task_reg</code> structure.</p>
+
+<h3><code>void add_helperfunc (lua_State *L, const task_ops *ops)</code></h3>
+<p>Used to create a task type associated with the callbacks in the <code>ops</code>
+	parameter. Pushes in the Lua stack the Lua function that creates, prepares and
+	returns the task.
+</p>
+
+<pre><h3><code>typedef struct task_reg {
+	const char *name;
+	const task_ops *ops;
+} task_reg;
+</code></h3></pre>
+
+<p>This struct associates a name with a <code>task_ops</code> structure. Used in the
+	<code>tasklib()</code> function.
+</p>
+
+<h3><code>void tasklib (lua_State *L, const char *libname, const task_reg *l)</code></h3>
+<p>Analogous to the <code>luaL_openlib()</code> function. <code>libname</code> is a C
+	string with the name to be given to the library. <code>l</code> points to an array
+	of <code>task_reg</code> structures (finished by a <code>{NULL, NULL}</code>
+	record) specifying the names and callbacks of any 'task-able' operations. At return,
+	the library's table is left on the Lua stack.
+</p>
+
+<h3><code>void signal_task (int pause)</code></h3>
+<p>This utility function can be called by the <code>work</code> callback to signal the Lua
+	code. The current task will appear in the output queue, where it would eventually be
+	picked by the <code>queue:wait()</code> function.
+</p>
+<p>If <code>pause</code> is non-zero, the task is put in the "Paused" state and the thread
+	blocks, waiting for the Lua code to call the <code>helper.update(task)</code> function.
+	This is useful if the operation can't continue without some interaction with the Lua
+	code.
+</p>
+
+<p>
+Copyright &copy; 2006 Javier Guerra G. All rights reserved.
+</p>
+
+<!-- download +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
+
+<h2 id=download>Download</h2>
+
+<p>
+</p>
+
+<pre class=example>
+</pre>
+
+<!-- footer +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
+
+<div class=footer>
+<hr>
+<center>
+<p class=bar>
+<a href="home.html#download">download</a> &middot;
+<a href="installation.html">installation</a>  &middot;
+<a href="examples.html">examples</a>  &middot;
+<a href="reference.html">reference</a> 
+</p>
+<p>
+<small>
+</small>
+</p>
+</center>
+</div>
+
+</body>
+</html>
