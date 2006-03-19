@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.7 2006-03-18 01:42:29 jguerra Exp $
+ * $Id: helper.c,v 1.8 2006-03-19 03:02:49 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -320,7 +320,9 @@ static int task_update (lua_State *L) {
 	if (t && t->ops && t->ops->update)
 		ret = t->ops->update (L, t->udata);
 	t->state = nxtstate;
-	if (t->state == TSK_FINISHED)
+	if (t->state != TSK_PAUSED)
+		pthread_cond_broadcast (&t->unpaused);
+	if (t->state == TSK_FINISHED)					/* can this be dangerous??? */
 		free (t);
 	
 	pthread_mutex_unlock (&t->lock);
