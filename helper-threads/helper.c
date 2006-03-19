@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.8 2006-03-19 03:02:49 jguerra Exp $
+ * $Id: helper.c,v 1.9 2006-03-19 14:51:15 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -401,7 +401,8 @@ static int queue_removetask (lua_State *L) {
 	task_t *t = check_task (L, 2);
 	
 	if (q_remove (q, t)) {
-		tsk_setstate (t, TSK_READY);
+		if (t->state == TSK_WAITING)
+			tsk_setstate (t, TSK_READY);
 		return 1;
 	} else
 		return 0;
