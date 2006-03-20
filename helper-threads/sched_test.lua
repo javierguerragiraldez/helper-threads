@@ -3,11 +3,9 @@ require "helper"
 require "sched"
 require "timer"
 
-if false then 
+if true then 
 
-	function de_dos (t)
-		helper.update (t)
-		
+	function de_dos ()
 		print ("de_dos")
 		
 		while true do
@@ -16,9 +14,7 @@ if false then
 		end
 	end
 	
-	function de_tres (t)
-		helper.update (t)
-		
+	function de_tres ()
 		print ("de_tres")
 		
 		while true do

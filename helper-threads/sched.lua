@@ -1,7 +1,7 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.2 2006-03-19 14:53:19 jguerra Exp $
+ * $Id: sched.lua,v 1.3 2006-03-20 23:10:36 jguerra Exp $
 --]]
 
 
@@ -14,18 +14,30 @@ local _task_co = {}
 local _co_queue = {}
 local _co_thread = {}
 
+local function _step (co, task)
+	local ok, task2 = coroutine.resume (co, task)
+	
+	if ok and task2 and coroutine.status (co) ~= "dead" then
+		_task_co [task2] = co
+		if helper.state (task2) == "Ready" then
+			_co_queue [co]:addtask (task2)
+		end
+		
+	else
+		_co_thread [co] = nil
+		_co_queue [co] = nil
+	end
+end
+
 function add_thread (f)
 	
 	local co = coroutine.create (f)
-	local tsk = helper.null()
 	local queue = helper.newqueue ()
 	local thread = helper.newthread (queue, _out_queue)
-	
-	_task_co [tsk] = co
 	_co_queue [co] = queue
 	_co_thread [co] = thread
 	
-	queue:addtask (tsk)
+	_step (co)
 end
 
 function run ()
@@ -35,16 +47,7 @@ function run ()
 		local co = _task_co [task]
 		_task_co [task] = nil
 		
-		local ok, task2 = coroutine.resume (co, task)
-		
-		if task2 and coroutine.status (co) ~= "dead" then
-			_task_co [task2] = co
-			_co_queue [co]:addtask (task2)
-			
-		else
-			_co_thread [co] = nil
-			_co_queue [co] = nil
-		end
+		_step (co, task)
 	end
 end
 
