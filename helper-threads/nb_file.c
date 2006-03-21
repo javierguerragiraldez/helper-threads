@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: nb_file.c,v 1.3 2006-03-19 03:04:41 jguerra Exp $
+ * $Id: nb_file.c,v 1.4 2006-03-21 20:10:24 jguerra Exp $
  */
  
 #include <stdlib.h>
@@ -110,7 +110,6 @@ static FILE *tofile (lua_State *L, int findex) {
 
 typedef enum read_kind_t {
 	RK_NULL,
-	RK_FILL,
 	RK_ATMOST,
 	RK_LINE,
 	RK_ALL
@@ -118,10 +117,11 @@ typedef enum read_kind_t {
 
 typedef struct read_udata {
 	FILE *f;
-	long offset;
 	size_t size;
 	read_kind_t kind;
 	buffer_t b;
+	int ferror;
+	int feof;
 } read_udata;
 
 static int read_prepare (lua_State *L, void **udata) {
@@ -131,16 +131,16 @@ static int read_prepare (lua_State *L, void **udata) {
 		luaL_error (L, "can't allocate read udata");
 	*udata = ud;
 	buffer_init (&ud->b);
+	ud->ferror = 0;
+	ud->feof = 0;
 	
 	ud->f = tofile (L, 1);
-	ud->offset = ftell (ud->f);
 	
 	n = lua_tonumber (L, 2);
 	
 	if (n) {
-		
 		ud->size = n;
-		ud->kind = RK_FILL;
+		ud->kind = RK_ATMOST;
 		buffer_resize (&ud->b, n);
 		
 	} else {
@@ -155,13 +155,11 @@ static int read_work (void *udata) {
 	read_udata *ud = (read_udata *)udata;
 	switch (ud->kind) {
 		
-		case RK_FILL:
-			while (buffer_len (&ud->b) < ud->size) {
-				fseek (ud->f, ud->offset + buffer_len (&ud->b), SEEK_SET);
-				buffer_fread (&ud->b, ud->f, ud->size - buffer_len (&ud->b));
-			}
+		case RK_ATMOST:
+			buffer_fread (&ud->b, ud->f, ud->size - buffer_len (&ud->b));
+			ud->ferror = ferror (ud->f);
+			ud->feof = feof (ud->f);
 			break;
-			
 	}
 	
 	return 0;
@@ -169,13 +167,23 @@ static int read_work (void *udata) {
 
 static int read_update (lua_State *L, void *udata) {
 	read_udata *ud = (read_udata *)udata;
+	int ret = 1;
 	
-	lua_pushlstring (L, (char *)ud->b.data, buffer_len (&ud->b));
+	if (ud->ferror != 0) {
+		lua_pushnil (L);
+		lua_pushstring (L, strerror (ud->ferror));
+		ret = 2;
+	
+	} else if (buffer_len (&ud->b) > 0) {
+		lua_pushlstring (L, (char *)ud->b.data, buffer_len (&ud->b));
+	
+	} else if (ud->feof && buffer_len (&ud->b) == 0) {
+		lua_pushnil (L);
+	}
 	
 	buffer_free (&ud->b);
 	free (ud);
-	
-	return 1;
+	return ret;
 }
 
 static const task_ops read_ops = {
@@ -198,6 +206,7 @@ typedef struct write_udata {
 static int write_prepare (lua_State *L, void **udata) {
 	write_udata *ud = NULL;
 	FILE *f = tofile (L, 1);
+
 	luaL_checktype (L, 2, LUA_TSTRING);
 	
 	ud = (write_udata *)malloc (sizeof (write_udata));
