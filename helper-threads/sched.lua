@@ -1,7 +1,7 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.4 2006-03-21 14:27:23 jguerra Exp $
+ * $Id: sched.lua,v 1.5 2006-03-21 20:11:33 jguerra Exp $
 --]]
 
 
@@ -46,7 +46,7 @@ function add_thread (f)
 end
 
 function run ()
-	while true do
+	while next (_task_co) ~= nil do
 		local task = _out_queue:wait()
 		if task ~= nil then
 			local co = _task_co [task]
