@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.9 2006-03-19 14:51:15 jguerra Exp $
+ * $Id: helper.c,v 1.10 2006-03-22 00:59:04 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -441,7 +441,7 @@ static int queue_wait (lua_State *L) {
 		NUMBER_TO_TIMESPEC (timeout, &ts);
 		
 		gettimeofday (&tv, NULL);
-		TIMEVAL_TO_TIMESPEC (&tv, &now)
+		TIMEVAL_TO_TIMESPEC (&tv, &now);
 		timeradd (&ts, &now, &ts);
 		
 		t = q_wait (q, &ts);
@@ -620,6 +620,72 @@ static task_ops null_task = {
 	null_update
 };
 
+/**********************************
+ * waiter task
+ **********************************/
+typedef struct waiter_udata {
+	queue_t *q;
+	task_t *t;
+	struct timespec timeout;
+} waiter_udata;
+
+static int waiter_prepare (lua_State *L, void **udata) {
+	queue_t *q = check_queue (L, 1);
+	waiter_udata *ud = (waiter_udata *)malloc (sizeof (waiter_udata));
+	if (!ud)
+		luaL_error (L, "can't allocate userdata");
+	*udata = ud;
+	ud->q = q;
+	ud->t = NULL;
+	
+	if (lua_isnoneornil (L, 2)) {
+		ud->timeout.tv_sec = 0;
+		ud->timeout.tv_nsec = 0;
+		
+	} else {
+		
+		struct timeval tv;
+		struct timespec now;
+		
+		lua_Number timeout = lua_tonumber (L, 2);
+		NUMBER_TO_TIMESPEC (timeout, &ud->timeout);
+		
+		gettimeofday (&tv, NULL);
+		TIMEVAL_TO_TIMESPEC (&tv, &now);
+		timeradd (&ud->timeout, &now, &ud->timeout);
+	}
+
+	return 0;
+}
+
+static int waiter_work (void *udata) {
+	waiter_udata *ud = (waiter_udata *)udata;
+	
+	if (ud->timeout.tv_sec != 0 || ud->timeout.tv_nsec != 0)
+		ud->t = q_wait (ud->q, NULL);
+	else
+		ud->t = q_wait (ud->q, &ud->timeout);
+	
+	return 0;
+}
+
+static int waiter_update (lua_State *L, void *udata) {
+	waiter_udata *ud = (waiter_udata *)udata;
+	
+	if (ud->t != NULL)
+		lua_pushlightuserdata (L, ud->t);
+	else
+		lua_pushnil (L);
+	
+	return 1;
+}
+
+static task_ops waiter_ops = {
+	waiter_prepare,
+	waiter_work,
+	waiter_update
+};
+
 /*******************************************************
  * Initialization
  *******************************************************/
@@ -645,6 +711,10 @@ static void set_info (lua_State *L) {
 static void set_tasks (lua_State *L) {
 	lua_pushliteral (L, "null");
 	add_helperfunc_st (L, &null_task);
+	lua_settable (L, -3);
+	
+	lua_pushliteral (L, "waiter");
+	add_helperfunc_st (L, &waiter_ops);
 	lua_settable (L, -3);
 }
 
