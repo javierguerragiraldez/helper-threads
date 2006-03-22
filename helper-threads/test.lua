@@ -1,7 +1,7 @@
 --
 -- Helper Threads Toolkit
 -- (c) 2006 Javier Guerra G.
--- $Id: test.lua,v 1.4 2006-03-13 22:10:23 jguerra Exp $
+-- $Id: test.lua,v 1.5 2006-03-22 22:26:53 jguerra Exp $
 --
 
 require "helper"
@@ -14,7 +14,7 @@ print ("queues:", q1, q2)
 
 th=helper.newthread (q1, q2)
 print ("thread:", th)
-th=helper.newthread (q1, q2)
+--th=helper.newthread (q1, q2)
 print ("thread:", th)
 
 t1=timer.timer(10)
@@ -25,10 +25,21 @@ t2=timer.timer(2)
 print ("t2 (2 sec):", t2)
 print ("state:", helper.state (t2))
 
+t_nul = helper.null()
+print ("tnull (null):", t_nul)
+print ("state:", helper.state (t_nul))
+
 --helper.finish(tsk)
 
 q1:addtask (t1)
+q1:addtask (t_nul)
 q1:addtask (t2)
+
+tx=q2:wait()
+print ("tx:", tx);
+print ("state:", helper.state (tx))
+print ("t1:", helper.state (t1), "t2:", helper.state (t2))
+helper.update (tx)
 
 tx=q2:wait()
 print ("tx:", tx);
