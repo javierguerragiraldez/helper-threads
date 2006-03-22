@@ -1,7 +1,7 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.5 2006-03-21 20:11:33 jguerra Exp $
+ * $Id: sched.lua,v 1.6 2006-03-22 22:26:05 jguerra Exp $
 --]]
 
 
@@ -43,6 +43,10 @@ function add_thread (f)
 	_co_queue [co] = queue
 	_co_thread [co] = thread
 	
+end
+
+function yield (t, ...)
+	return helper.update (coroutine.yield (t), unpack (arg))
 end
 
 function run ()
