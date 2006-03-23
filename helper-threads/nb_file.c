@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: nb_file.c,v 1.4 2006-03-21 20:10:24 jguerra Exp $
+ * $Id: nb_file.c,v 1.5 2006-03-23 21:06:06 jguerra Exp $
  */
  
 #include <stdlib.h>
@@ -17,6 +17,7 @@
 /**********************************
 ** buffer handling
 ***********************************/
+static const size_t BUF_GLOBSIZE = 1024;
 typedef struct buffer_t {
 	unsigned char *data;
 	unsigned char *end;
@@ -55,6 +56,13 @@ static size_t buffer_resize (buffer_t *b, size_t size) {
 	}
 	
 	return b->bufsize;
+}
+
+static void buffer_addchar (buffer_t *b, const char c) {
+	if (buffer_len (b) >= b->bufsize)
+		buffer_resize (b, buffer_len (b) + BUF_GLOBSIZE);
+	
+	*b->end++ = c;
 }
 
 static void buffer_add (buffer_t *b, const char *data, size_t len) {
@@ -130,22 +138,44 @@ static int read_prepare (lua_State *L, void **udata) {
 	if (!ud)
 		luaL_error (L, "can't allocate read udata");
 	*udata = ud;
+	ud->size = 0;
+	ud->kind = RK_NULL;
 	buffer_init (&ud->b);
 	ud->ferror = 0;
 	ud->feof = 0;
 	
 	ud->f = tofile (L, 1);
 	
-	n = lua_tonumber (L, 2);
+	if (lua_isnoneornil (L, 2))
+		ud->kind = RK_LINE;
 	
-	if (n) {
-		ud->size = n;
-		ud->kind = RK_ATMOST;
-		buffer_resize (&ud->b, n);
+	else {
+		n = lua_tonumber (L, 2);
 		
-	} else {
-		const char *str = lua_tostring (L, 2);
-		luaL_error (L, "'%s' not implemented yet", str);
+		if (n) {
+			ud->size = n;
+			ud->kind = RK_ATMOST;
+			buffer_resize (&ud->b, n);
+			
+		} else {
+			const char *str = lua_tostring (L, 2);
+			if (str[0] == '*') {
+				switch (str[1]) {
+					case 'l':
+						ud->kind = RK_LINE;
+						break;
+					case 'a':
+						ud->kind = RK_ALL;
+						break;
+				}
+			}
+		}
+	}
+	
+	if (ud->kind == RK_NULL) {
+		lua_pushnil (L);
+		lua_pushliteral (L, "format not implemented");
+		return 2;
 	}
 	
 	return 0;
@@ -153,12 +183,30 @@ static int read_prepare (lua_State *L, void **udata) {
 
 static int read_work (void *udata) {
 	read_udata *ud = (read_udata *)udata;
+	int c;
 	switch (ud->kind) {
 		
 		case RK_ATMOST:
-			buffer_fread (&ud->b, ud->f, ud->size - buffer_len (&ud->b));
+			buffer_fread (&ud->b, ud->f, ud->size);
 			ud->ferror = ferror (ud->f);
 			ud->feof = feof (ud->f);
+			break;
+			
+		case RK_LINE:
+			while ((c=fgetc (ud->f)) != '\n' && c != '\r' && c != EOF)
+				buffer_addchar (&ud->b, c);
+			
+			ud->ferror = ferror (ud->f);
+			ud->feof = feof (ud->f);
+			break;
+			
+		case RK_ALL:
+			while (!feof (ud->f))
+				buffer_fread (&ud->b, ud->f, 8192);
+			ud->feof = feof (ud->f);
+			ud->ferror = ferror (ud->f);
+			break;
+		default:
 			break;
 	}
 	
