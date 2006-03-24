@@ -1,6 +1,7 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html lang="es-pe">
 <head>
+  <!-- $Id: index.html,v 1.3 2006-03-24 00:22:00 jguerra Exp $-->
   <meta name="description" content="The Helper Threads Toolkit Homepage" />
   <meta name="keywords"
  content="Lua, Library, Multi-Threading, Threads, Support" />
@@ -389,9 +390,15 @@ Threads: Building blocks for non-blocking libraries.
 </p>
 <ul>
 	<li><h4><code>nb_file.read (file, size)</code></h4>
-	<p>Reads <code>size</code> bytes from <code>file</code>. The <code>helper.update()</code>
-		call will return read data as a string, <code><strong>nil</strong></code> at end
-		of file, or <code><strong>nil</strong></code> and an error message on failure.
+	<p>Reads from <code>file</code>, <code>size</code> can be:</p>
+	<ul>
+		<li><em><strong>number</strong></em>: reads up to that many characters (could be less at the end of file).</li>
+		<li><strong>"*l"</strong>: reads a line, without the end of line character.</li>
+		<li><strong>"*a"</strong>: reads the whole file.</li>
+	</ul>
+	<p>The <code>helper.update()</code> call will return read data as a string,
+		<code><strong>nil</strong></code> at end of file, or <code><strong>nil</strong></code>
+		and an error message on failure.
 	</p></li>
 	<li><h4><code>nb_file.write (file, data)</code></h4>
 	<p>Writes <code>data</code> on <code>file</code>. the <code>helper.update()</code>
