@@ -1,7 +1,7 @@
 #
 # Helper Threads Toolkit
 # (c) 2006 Javier Guerra G.
-# $Id: Makefile,v 1.3 2006-03-18 01:44:02 jguerra Exp $
+# $Id: Makefile,v 1.4 2006-03-28 17:16:04 jguerra Exp $
 #
  
 # Compilation parameters
@@ -20,7 +20,7 @@ CWARNS = -Wall -pedantic \
 CFLAGS = $(CONFIG) $(CWARNS) -ansi -g -O2 -I/usr/local/include/lua5
 
 
-all : helper.so timer.so nb_file.so
+all : helper.so timer.so nb_file.so nb_tcp.so
 
 helper.o : helper.c helper.h
 timer.o : timer.c helper.h
@@ -33,3 +33,6 @@ timer.so : timer.o
 
 nb_file.so : nb_file.o
 	ld -o nb_file.so -shared nb_file.o
+
+nb_tcp.so : nb_tcp.o
+	ld -o nb_tcp.so -shared nb_tcp.o
