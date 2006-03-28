@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: nb_tcp.c,v 1.1 2006-03-28 17:16:04 jguerra Exp $
+ * $Id: nb_tcp.c,v 1.2 2006-03-28 19:24:36 jguerra Exp $
  */
 
 
@@ -81,6 +81,7 @@ static void pipe_makespace (pipe_t *p, size_t l) {
 			return;					/* error, return untouched */
 		memcpy (new_data, p->head, len);
 		p->data = new_data;
+		p->bufsize = newbufsize;
 	}
 	
 	p->head = p->data;						/* in any case, there's no old data anymore */
@@ -171,6 +172,7 @@ static int newserver (lua_State *L) {
 		lua_pushstring (L, strerror (errno));
 		return 2;
 	}
+	setsockopt (sp->fd, SOL_SOCKET, SO_REUSEADDR, NULL, 0);
 	
 	sp->myaddr.sin_family = AF_INET;
 	sp->myaddr.sin_port = ntohs (port);
@@ -394,6 +396,8 @@ static int tcpwrite_prepare (lua_State *L, void **udata) {
 	if (!ud) 
 		luaL_error (L, "can't alloc userdata");
 	
+	*udata = ud;
+	
 	ud->fd = tcps->fd;
 	pipe_init (&ud->p, datalen);
 	if (!ud->p.data) {
@@ -463,8 +467,6 @@ static int tcpread_prepare (lua_State *L, void **udata) {
 		luaL_error (L, "can't alloc userdata");
 	*udata = ud;
 	
-	/*printf ("read prepare\n"); */
-	
 	ud->str = tcps;
 	ud->size = 0;
 	ud->err = 0;
@@ -504,7 +506,10 @@ static int tcpread_work (void *udata) {
 			break;
 			
 		case RK_LINE:
-			while (1) {
+			if (pipe_spaceleft (p) ==0)
+				pipe_makespace (p, 1024);
+			
+			while (pipe_spaceleft (p)) {
 				char *cp = p->tail;
 				ssize_t r = read (ud->str->fd, p->tail, pipe_spaceleft (p));
 				if (r < 0) {
@@ -555,6 +560,8 @@ static int tcpread_finish (lua_State *L, void *udata) {
 		case RK_LINE:
 			lua_pushlstring (L, p->head, ud->size);
 			p->head += ud->size;
+			while ((*p->head == '\r' || *p->head == '\n') && p->head < p->tail)
+				p->head++;
 			break;
 			
 		case RK_ATMOST:
