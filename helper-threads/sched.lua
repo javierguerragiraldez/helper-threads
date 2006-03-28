@@ -1,7 +1,7 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.6 2006-03-22 22:26:05 jguerra Exp $
+ * $Id: sched.lua,v 1.7 2006-03-28 19:23:58 jguerra Exp $
 --]]
 
 
@@ -22,6 +22,9 @@ local function _step (co, task)
 		if helper.state (task2) == "Ready" then
 			_co_queue [co]:addtask (task2)
 		end
+	
+	elseif not ok then
+		error (task2)
 		
 	else
 		_co_thread [co] = nil
