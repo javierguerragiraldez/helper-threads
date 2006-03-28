@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.h,v 1.5 2006-03-13 22:08:08 jguerra Exp $
+ * $Id: helper.h,v 1.6 2006-03-28 17:15:22 jguerra Exp $
  */
 
 typedef struct task_ops {
@@ -18,7 +18,7 @@ typedef struct task_reg {
 
 typedef void (*add_helperfunc_t) (lua_State *L, const task_ops *ops);
 typedef void (*tasklib_t) (lua_State *L, const char *libname, const task_reg *l);
-typedef void (*signal_task_t) (int pause);
+typedef void (*signal_task_t) (int );
 
 add_helperfunc_t add_helperfunc;
 tasklib_t tasklib;
