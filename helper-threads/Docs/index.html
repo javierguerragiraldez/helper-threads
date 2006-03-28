@@ -1,7 +1,7 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html lang="es-pe">
 <head>
-  <!-- $Id: index.html,v 1.3 2006-03-24 00:22:00 jguerra Exp $-->
+  <!-- $Id: index.html,v 1.4 2006-03-28 20:09:44 jguerra Exp $-->
   <meta name="description" content="The Helper Threads Toolkit Homepage" />
   <meta name="keywords"
  content="Lua, Library, Multi-Threading, Threads, Support" />
@@ -407,6 +407,65 @@ Threads: Building blocks for non-blocking libraries.
 	</p></li>
 </ul>
 
+<h3>nb_tcp.c</h3>
+<p>A very minimal TCP I/O library. Only those functions that would potentially block
+	(<code>newclient()</code>, <code>accept()</code>, <code>read()</code>,
+	<code>write()</code>) return a task; but others (<code>newserver()</code>,
+	<code>close()</code>) don't need it and work as usual. There are two different
+	objects: Server Port objects and TCP Stream objects. The first are used only to
+	open a port and accept connections, while the second type represent opened
+	connections, created either as clients (with <code>newclient()</code>), or
+	as server, after accepting a connection.
+</p>
+<ul>
+	<li><h4><code>nb_tcp.newclient (remaddr, remport [, localport])</code></h4>
+		<p>Creates a new TCP stream and connects it to the server at host address
+			<code>remaddr</code>, port number <code>remport</code>, optionally
+			specifying a local port with <code>localport</code>. The
+			<code>helper.update()</code> call will return the new tcpstream object,
+			or <code><strong>nil</strong></code> and an error message on failure.
+		</p>
+	</li>
+	<li><h4><code>nb_tcp.newserver (tcpport)</code></h4>
+		<p>Creates a Server Port object, accepting TCP connections on the given
+			port.
+		</p>
+	</li>
+	<li><h4><code>server:accept ()</code></h4>
+		<p>Returns a task that will wait until another host opens a connection on
+			the server port. The <code>helper.update()</code> call returns a
+			TCP Stream with the new connection, or <code><strong>nil</strong></code>
+			and an error message on failure.
+		</p>
+	</li>
+	<li><h4><code>stream:write (data)</code></h4>
+		<p>Returns a task that will write the data on the stream. The task won't
+			be done until all the data has been written. The <code>helper.update()</code>
+			call returns <code><strong>true</strong></code> on success or
+			<code><strong>nil</strong></code> and an error message on failure.
+		</p>
+	</li>
+	<li><h4><code>stream:read (mode)</code></h4>
+		<p>Returns a task that reads data from the stream. The task won't be done
+			until enough data has been read to satisfy the <code>mode</code>.
+		</p>
+		<ul>
+			<li><em><strong>number</strong></em>: reads that many characters.</li>
+			<li><strong>"*l"</strong>: reads a line, without the end of line character.</li>
+		</ul>
+		<p>The <code>helper.update()</code> call returns a string containing the data,
+			or <code><strong>nil</strong></code> and an error message on failure.
+		</p>
+	</li>
+	<li><h4><code>server:close()<br />stream:close()</code></h4>
+		<p>Close the stream or server port. The object is invalid after a call to
+			this function. If this function is not called, the garbage collector
+			calls it just before disposing it; but it's better to do it as soon as
+			appropriate, to release unneeded resources.
+		</p>
+	</li>
+</ul>
+
 <h3>sched.lua</h3>
 <p>A simple coroutine-based scheduler.
 </p>
@@ -439,6 +498,8 @@ Threads: Building blocks for non-blocking libraries.
 			example of how to use helper threads for a discrete operation.
 		</p></li>
 </ul>
+
+<h3>Example 1:</h3>
 <p>For example, this is a scheduler-friendly file copying function that uses
 	<code>nb_file</code> I/O functions:
 </p>
@@ -471,6 +532,38 @@ sched.add_thread (function ()
 end)
 
 sched.run ()
+</code></pre>
+
+<h3>Example 2:</h3>
+<p>A simple line-oriented "echo server"</p>
+<pre style="margin : 0 0 0 50px;"><code>require "helper"
+require "sched"
+require "nb_tcp"
+
+function do_listen ()
+	-- listens on a port and spawns a thread for each connection.
+	local srv = assert (nb_tcp.newserver (3000))
+	while true do
+		local conn = assert (sched.yield (srv:accept ()))
+		sched.add_thread (function ()
+			handle_client (conn)
+		end)
+	end
+end
+
+function handle_client (conn)
+	-- reads each line and responds with an echo.
+	local ln
+	repeat
+		ln = assert (sched.yield (conn:read ("*l")))
+		assert (sched.yield (conn:write ("=>"..ln.."\n")))
+		print (ln)
+	until ln == "quit"
+	conn:close()
+end
+
+sched.add_thread (do_listen)
+sched.run()
 </code></pre>
 
 <!-- download +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
