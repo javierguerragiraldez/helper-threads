@@ -1,7 +1,7 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html lang="es-pe">
 <head>
-  <!-- $Id: index.html,v 1.4 2006-03-28 20:09:44 jguerra Exp $-->
+  <!-- $Id: index.html,v 1.5 2006-03-30 14:49:18 jguerra Exp $-->
   <meta name="description" content="The Helper Threads Toolkit Homepage" />
   <meta name="keywords"
  content="Lua, Library, Multi-Threading, Threads, Support" />
@@ -258,9 +258,9 @@ Threads: Building blocks for non-blocking libraries.
 </p>
 <h3><code>helper.null ()</code></h3>
 <p>The simplest possible task. When a thread picks a null task from its
-	input queue, it will immediately put in the output queue without any
+	input queue, it will immediately put it in the output queue without any
 	processing. Even if it doesn't do anything, it has to be finished with
-	a call to helper.update (task).
+	a call to <code>helper.update (task)</code>.
 </p>
 <h3><code>helper.waiter (queue [, timeout])</code></h3>
 <p>A background version of <code>queue:wait ([timeout])</code>, this task will
@@ -273,7 +273,7 @@ Threads: Building blocks for non-blocking libraries.
 	time, not with respect to the time the task was picked by the thread.
 </p>
 <h2 id="capi">The C API</h2>
-<p>This API is used by C
+<p>This API is defined in the <code>helper.c</code> file, for use by C
 	programmers that use the Helper Threads Toolkit to create non-blocking
 	libraries. For each 'task-able' operation, the library writer has to
 	provide three C callback functions and register them as the task
@@ -342,7 +342,9 @@ Threads: Building blocks for non-blocking libraries.
 </p>
 <h3><code>void tasklib (lua_State *L, const char *libname, const task_reg *l)</code></h3>
 <p>Analogous to the <code>luaL_openlib()</code> function. <code>libname</code>
-	is a C string with the name to be given to the library. <code>l</code>
+	is a C string with the name to be given to the library. If <code>libname</code>
+	is <code>NULL</code>, it uses the table that should be at the top of
+	the Lua stack. <code>l</code>
 	points to an array of <code>task_reg</code> structures (finished by a
 	<code>{NULL, NULL}</code> record) specifying the
 	names and callbacks of any 'task-able' operations. At return, the
@@ -377,7 +379,7 @@ Threads: Building blocks for non-blocking libraries.
 		signalled task). If it's a non-negative number, it changes the tick period
 		(after the current period). Any negative number finishes the ticker, the
 		task will be signalled a last time, and has to be diposed by calling
-		<code>helper.update()</code>.
+		<code>helper.update()</code> again.
 	</p></li>
 </ul>
 
@@ -401,7 +403,7 @@ Threads: Building blocks for non-blocking libraries.
 		and an error message on failure.
 	</p></li>
 	<li><h4><code>nb_file.write (file, data)</code></h4>
-	<p>Writes <code>data</code> on <code>file</code>. the <code>helper.update()</code>
+	<p>Writes <code>data</code> on <code>file</code>. The <code>helper.update()</code>
 		call will return <code><strong>true</strong></code> on success, or
 		<code><strong>nil</strong></code> and an error message otherwise.
 	</p></li>
