@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: nb_tcp.c,v 1.2 2006-03-28 19:24:36 jguerra Exp $
+ * $Id: nb_tcp.c,v 1.3 2006-05-25 14:39:40 jguerra Exp $
  */
 
 
@@ -399,6 +399,7 @@ static int tcpwrite_prepare (lua_State *L, void **udata) {
 	*udata = ud;
 	
 	ud->fd = tcps->fd;
+	ud->err = 0;
 	pipe_init (&ud->p, datalen);
 	if (!ud->p.data) {
 		free (ud);
