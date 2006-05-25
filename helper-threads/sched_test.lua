@@ -9,7 +9,7 @@ if true then
 		print ("de_dos")
 		
 		while true do
-			local nada = helper.update (coroutine.yield (timer.timer (2)))
+			local nada = sched.yield (timer.timer (2))
 			print ("dos")
 		end
 	end
@@ -18,7 +18,7 @@ if true then
 		print ("de_tres")
 		
 		while true do
-			local nada = helper.update (coroutine.yield (timer.timer (3)))
+			local nada = sched.yield (timer.timer (3))
 			print ("\ttres")
 		end
 	end
