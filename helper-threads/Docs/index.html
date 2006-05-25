@@ -1,7 +1,7 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html lang="es-pe">
 <head>
-  <!-- $Id: index.html,v 1.5 2006-03-30 14:49:18 jguerra Exp $-->
+  <!-- $Id: index.html,v 1.6 2006-05-25 14:44:08 jguerra Exp $-->
   <meta name="description" content="The Helper Threads Toolkit Homepage" />
   <meta name="keywords"
  content="Lua, Library, Multi-Threading, Threads, Support" />
@@ -159,7 +159,7 @@ Threads: Building blocks for non-blocking libraries.
 	identifies the read operation and encapsulates the given parameters <code>file</code>
 	and <code>len</code>.
 </p>
-<p>In most cases, these functions
+<p>In most cases, the functions described here
 	would be called by a Lua dispatcher; that is, some Lua framework that
 	manages several Lua threads of execution using coroutines or maybe some
 	other methods.
@@ -469,7 +469,9 @@ Threads: Building blocks for non-blocking libraries.
 </ul>
 
 <h3>sched.lua</h3>
-<p>A simple coroutine-based scheduler.
+<p>A simple coroutine-based scheduler. Programs written using this scheduler shouldn't have
+to call any function from the <code>helper</code> package; just wrap any task-producing
+function with <code>sched.yield()</code> to block the current Lua thread.
 </p>
 <ul>
 	<li><h4><code>sched.add_thread (f)</code></h4>
@@ -484,9 +486,12 @@ Threads: Building blocks for non-blocking libraries.
 			until all of them are finished.
 		</p></li>
 	<li><h4><code>sched.yield (task, ...)</code></h4>
-		<p>Equivalent to <code>helper.update (coroutine.yield (task), ...)</code>. It
-			should be used from a Lua thread, wrapping any task-producing function with
-			this, it's easy to write blocking-style code.
+		<p>Equivalent to <code>helper.update (coroutine.yield (task), ...)</code>, 
+			should be used from a Lua thread.  It's easy to write blocking-style code just
+			wrapping any task-producing function with this. Note that the extra parameters
+			are fed to the <code>helper.update()</code> call after the task appears on
+			the output queue, in most cases that would be when the task is done, and
+			usually don't use any parameter, just return the results.
 		</p></li>
 	<li><h4><code>sched.par_foreach (in_t, f_a, f_b, n)</code></h4>
 		<p>Processes the table <code>in_t</code> using <code>n</code> helper threads. Each
