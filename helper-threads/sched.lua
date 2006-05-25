@@ -1,11 +1,12 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.7 2006-03-28 19:23:58 jguerra Exp $
+ * $Id: sched.lua,v 1.8 2006-05-25 13:59:56 jguerra Exp $
 --]]
 
-
-require "helper"
+local error, next, unpack = error, next, unpack
+local coroutine, table = coroutine, table
+local helper = require "helper"
 
 module (arg and arg[1])
 
