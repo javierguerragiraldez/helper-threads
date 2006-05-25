@@ -1,7 +1,7 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.8 2006-05-25 13:59:56 jguerra Exp $
+ * $Id: sched.lua,v 1.9 2006-05-25 14:42:46 jguerra Exp $
 --]]
 
 local error, next, unpack = error, next, unpack
@@ -17,15 +17,13 @@ local _co_thread = {}
 
 local function _step (co, task)
 	local ok, task2 = coroutine.resume (co, task)
-		
-	if ok and task2 and coroutine.status (co) ~= "dead" then
+	if not ok then error (task2) end
+	
+	if task2 and coroutine.status (co) ~= "dead" then
 		_task_co [task2] = co
 		if helper.state (task2) == "Ready" then
 			_co_queue [co]:addtask (task2)
 		end
-	
-	elseif not ok then
-		error (task2)
 		
 	else
 		_co_thread [co] = nil
