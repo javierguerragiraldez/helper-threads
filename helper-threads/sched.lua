@@ -1,7 +1,7 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.9 2006-05-25 14:42:46 jguerra Exp $
+ * $Id: sched.lua,v 1.10 2006-05-26 19:29:46 jguerra Exp $
 --]]
 
 local error, next, unpack = error, next, unpack
@@ -14,7 +14,14 @@ local _out_queue = helper.newqueue ()
 local _task_co = {}
 local _co_queue = {}
 local _co_thread = {}
+local _name_queue = {}
+local _name_thread = {}
 
+---------------------
+-- resumes a coroutine
+-- is run until blocked again, the new
+-- blocking task is added to the queue
+---------------------
 local function _step (co, task)
 	local ok, task2 = coroutine.resume (co, task)
 	if not ok then error (task2) end
@@ -31,13 +38,23 @@ local function _step (co, task)
 	end
 end
 
-function add_thread (f)
+---------------------------------------------------------------------------
+-- sched.add_thread (f [, name])
+--
+-- f: function; wrapped in a coroutine and scheduled to run
+-- name: any;  all threads with the same name use the same helper thread
+--     if nil, false or omitted, it gets it's own helper thread
+---------------------------------------------------------------------------
+function add_thread (f, name)
+	
+	local queue = name and _name_queue [name]
+	local thread = name and _name_thread [name]
 	
 	local co = coroutine.create (function (t) helper.update (t) return f() end)
 	
 	local task = helper.null ()
-	local queue = helper.newqueue ()
-	local thread = helper.newthread (queue, _out_queue)
+	queue = queue or helper.newqueue ()
+	thread = thread or helper.newthread (queue, _out_queue)
 	
 	queue:addtask (task)
 	
@@ -45,12 +62,29 @@ function add_thread (f)
 	_co_queue [co] = queue
 	_co_thread [co] = thread
 	
+	if name then
+		_name_queue [name] = queue
+		_name_thread [name]=  thread
+	end
 end
 
+------------------------------------------------------
+-- helper.yield (task [, ...])
+--
+-- wrap task-producing functions with this to
+-- yield to other threads.
+-- any extra arguments are used at helper.update() time
+---------------------------------------------------------
 function yield (t, ...)
 	return helper.update (coroutine.yield (t), unpack (arg))
 end
 
+--------------------------------------
+-- helper.run ()
+--
+-- runs scheduled threads.
+-- finishes when all threads are done
+--------------------------------------
 function run ()
 	while next (_task_co) ~= nil do
 		local task = _out_queue:wait()
