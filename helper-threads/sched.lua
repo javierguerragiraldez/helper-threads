@@ -1,7 +1,7 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.10 2006-05-26 19:29:46 jguerra Exp $
+ * $Id: sched.lua,v 1.11 2006-05-27 00:52:24 jguerra Exp $
 --]]
 
 local error, next, unpack = error, next, unpack
@@ -15,7 +15,7 @@ local _task_co = {}
 local _co_queue = {}
 local _co_thread = {}
 local _name_queue = {}
-local _name_thread = {}
+local _name_threads = {}
 
 ---------------------
 -- resumes a coroutine
@@ -38,6 +38,32 @@ local function _step (co, task)
 	end
 end
 
+
+--------------------------------------------------------
+-- named_queue (name, n_threads)
+--
+-- creates a named queue with a bunch of helper threads
+-- if the name was already used, the existing queue and
+-- threads are released and replaced
+-- TODO: close the queue, so it would be disposed
+-- after the last thread is done
+--------------------------------------------------------
+function named_queue (name, n_threads)
+	
+	_name_queue [name] = nil
+	_name_threads [name] = nil
+	
+	if n_threads <= 0 then return end
+	
+	_name_queue [name] = helper.newqueue ()
+	_name_threads [name] = {}
+	
+	for i = 1, n_threads do
+		table.insert (_name_threads [name], helper.newthread (_name_queue[name], _out_queue))
+	end
+	
+end
+
 ---------------------------------------------------------------------------
 -- sched.add_thread (f [, name])
 --
@@ -47,25 +73,26 @@ end
 ---------------------------------------------------------------------------
 function add_thread (f, name)
 	
-	local queue = name and _name_queue [name]
-	local thread = name and _name_thread [name]
+	local queue, thread
+	
+	if name then
+		assert (_name_queue [name], "unknown queue name")
+		queue = _name_queue [name]
+		thread = nil
+	else
+		queue = helper.newqueue ()
+		thread = helper.newthread (queue, _out_queue)
+		
+	end
 	
 	local co = coroutine.create (function (t) helper.update (t) return f() end)
 	
 	local task = helper.null ()
-	queue = queue or helper.newqueue ()
-	thread = thread or helper.newthread (queue, _out_queue)
-	
 	queue:addtask (task)
 	
 	_task_co [task] = co
 	_co_queue [co] = queue
 	_co_thread [co] = thread
-	
-	if name then
-		_name_queue [name] = queue
-		_name_thread [name]=  thread
-	end
 end
 
 ------------------------------------------------------
