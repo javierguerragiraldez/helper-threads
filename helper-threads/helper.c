@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.10 2006-03-22 00:59:04 jguerra Exp $
+ * $Id: helper.c,v 1.11 2006-05-27 18:51:44 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -498,12 +498,35 @@ static int new_thread (lua_State *L) {
 	thread_t *thrd = (thread_t *)lua_newuserdata (L, sizeof (thread_t));
 	thrd->in = in_q;
 	thrd->out = out_q;
+	thrd->task = NULL;
 	thrd->signal = 0;
 	ret = pthread_create (&thrd->pth, NULL, thread_work, thrd);
 	if (ret)
 		luaL_error (L, "error %d (\"%s\") creating helper thread", ret, strerror (ret));
 	
+	luaL_getmetatable (L, ThreadType);
+	lua_setmetatable (L, -2);
+	
 	return 1;
+}
+
+
+/*
+ * thread:currenttask ()
+ */
+static int currenttask (lua_State *L) {
+	thread_t *thrd = check_thread (L, 1);
+	
+	if (thrd->task) {
+		
+		lua_pushlightuserdata (L, thrd->task);
+		return 1;
+		
+	} else {
+		
+		lua_pushnil (L);
+		return 1;
+	}
 }
 
 /*
@@ -530,6 +553,7 @@ static const struct luaL_reg queue_meths [] = {
 	{NULL, NULL}
 };
 static const struct luaL_reg thread_meths [] = {
+	{"currenttask", currenttask },
 	{"__gc", thread_gc},
 	{NULL, NULL}
 };
