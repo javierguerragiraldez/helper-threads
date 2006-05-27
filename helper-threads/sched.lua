@@ -1,7 +1,7 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.11 2006-05-27 00:52:24 jguerra Exp $
+ * $Id: sched.lua,v 1.12 2006-05-27 17:34:43 jguerra Exp $
 --]]
 
 local error, next, unpack = error, next, unpack
@@ -40,28 +40,21 @@ end
 
 
 --------------------------------------------------------
--- named_queue (name, n_threads)
+-- add_helpers (name, n_helpers)
 --
--- creates a named queue with a bunch of helper threads
--- if the name was already used, the existing queue and
--- threads are released and replaced
--- TODO: close the queue, so it would be disposed
--- after the last thread is done
+-- adds some helper threads to a named queue
+-- creates the queue if necessary
 --------------------------------------------------------
-function named_queue (name, n_threads)
+function add_helpers (name, n_helpers)
 	
-	_name_queue [name] = nil
-	_name_threads [name] = nil
+	local queue = _name_queue [name] or helper.newqueue ()
+	_name_queue [name] = queue
+	local thrdlist = _name_threads [name] or {}
+	_name_threads [name] = thrdlist
 	
-	if n_threads <= 0 then return end
-	
-	_name_queue [name] = helper.newqueue ()
-	_name_threads [name] = {}
-	
-	for i = 1, n_threads do
-		table.insert (_name_threads [name], helper.newthread (_name_queue[name], _out_queue))
+	for i = 1, n_helpers do
+		table.insert (thrdlist, helper.newthread (queue, _out_queue))
 	end
-	
 end
 
 ---------------------------------------------------------------------------
