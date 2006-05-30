@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: nb_tcp.c,v 1.3 2006-05-25 14:39:40 jguerra Exp $
+ * $Id: nb_tcp.c,v 1.4 2006-05-30 18:02:14 jguerra Exp $
  */
 
 
@@ -332,6 +332,7 @@ static int serv_accept_prepare (lua_State *L, void **udata) {
 	
 	ud->sp = *sp;
 	ud->err = 0;
+	memset (&ud->new, 0, sizeof (ud->new));
 	
 	return 0;
 }
@@ -507,24 +508,29 @@ static int tcpread_work (void *udata) {
 			break;
 			
 		case RK_LINE:
-			if (pipe_spaceleft (p) ==0)
-				pipe_makespace (p, 1024);
-			
-			while (pipe_spaceleft (p)) {
-				char *cp = p->tail;
-				ssize_t r = read (ud->str->fd, p->tail, pipe_spaceleft (p));
-				if (r < 0) {
-					ud->err = errno;
-					return 0;
+			{
+				char *cp;
+				ssize_t r = 0;
+				
+				if (pipe_spaceleft (p) ==0)
+					pipe_makespace (p, 1024);
+				cp = p->head;
+				
+				while (1) {
+					while (*cp != '\r' && *cp != '\n' && cp < p->tail)
+						cp++;
+					if (cp < p->tail) {
+						ud->size = cp-p->head;
+						return 0;
+					}
+					
+					r = read (ud->str->fd, p->tail, pipe_spaceleft (p));
+					if (r < 0) {
+						ud->err = errno;
+						return 0;
+					}
+					p->tail += r;
 				}
-				p->tail += r;
-				while (*cp != '\r' && *cp != '\n' && cp < p->tail)
-					cp++;
-				if (cp < p->tail) {
-					ud->size = cp-p->head;
-					return 0;
-				}
-				pipe_makespace (p, 1024);
 			}
 			break;
 			
@@ -553,6 +559,13 @@ static int tcpread_finish (lua_State *L, void *udata) {
 	tcpread_udata *ud = (tcpread_udata *)udata;
 	pipe_t *p = &ud->str->r;
 	
+	if (ud->err) {
+		lua_pushnil (L);
+		lua_pushstring (L, strerror (ud->err));
+		free (ud);
+		return 2;
+	}
+	
 	switch (ud->kind) {
 		case RK_NULL:
 			lua_pushnil (L);
@@ -561,8 +574,14 @@ static int tcpread_finish (lua_State *L, void *udata) {
 		case RK_LINE:
 			lua_pushlstring (L, p->head, ud->size);
 			p->head += ud->size;
-			while ((*p->head == '\r' || *p->head == '\n') && p->head < p->tail)
+			if (*p->head == '\n')
 				p->head++;
+			else {
+				if (*p->head == '\r')
+					p->head++;
+				if (*p->head == '\n')
+					p->head++;
+			}
 			break;
 			
 		case RK_ATMOST:
