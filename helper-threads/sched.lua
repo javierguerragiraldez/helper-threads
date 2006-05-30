@@ -1,10 +1,10 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.12 2006-05-27 17:34:43 jguerra Exp $
+ * $Id: sched.lua,v 1.13 2006-05-30 18:05:51 jguerra Exp $
 --]]
 
-local error, next, unpack = error, next, unpack
+local assert, error, next, unpack = assert, error, next, unpack
 local coroutine, table = coroutine, table
 local helper = require "helper"
 
@@ -23,6 +23,7 @@ local _name_threads = {}
 -- blocking task is added to the queue
 ---------------------
 local function _step (co, task)
+	
 	local ok, task2 = coroutine.resume (co, task)
 	if not ok then error (task2) end
 	
@@ -75,9 +76,7 @@ function add_thread (f, name)
 	else
 		queue = helper.newqueue ()
 		thread = helper.newthread (queue, _out_queue)
-		
 	end
-	
 	local co = coroutine.create (function (t) helper.update (t) return f() end)
 	
 	local task = helper.null ()
