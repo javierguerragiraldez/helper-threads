@@ -1,7 +1,7 @@
 --
 -- Helper Threads Toolkit
 -- (c) 2006 Javier Guerra G.
--- $Id: test.lua,v 1.5 2006-03-22 22:26:53 jguerra Exp $
+-- $Id: test.lua,v 1.6 2006-05-30 18:06:40 jguerra Exp $
 --
 
 require "helper"
@@ -35,21 +35,25 @@ q1:addtask (t1)
 q1:addtask (t_nul)
 q1:addtask (t2)
 
+print ("curtask:", th:currenttask ())
 tx=q2:wait()
 print ("tx:", tx);
 print ("state:", helper.state (tx))
+print ("curtask:", th:currenttask ())
 print ("t1:", helper.state (t1), "t2:", helper.state (t2))
 helper.update (tx)
 
 tx=q2:wait()
 print ("tx:", tx);
 print ("state:", helper.state (tx))
+print ("curtask:", th:currenttask ())
 print ("t1:", helper.state (t1), "t2:", helper.state (t2))
 helper.update (tx)
 
 tx=q2:wait()
 print ("tx:", tx);
 print ("state:", helper.state (tx))
+print ("curtask:", th:currenttask ())
 print ("t1:", helper.state (t1), "t2:", helper.state (t2))
 helper.update (tx)
 
