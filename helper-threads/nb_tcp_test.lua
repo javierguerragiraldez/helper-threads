@@ -3,17 +3,7 @@ require "helper"
 require "sched"
 require "nb_tcp"
 
-function do_listen ()
-	local srv = assert (nb_tcp.newserver (3000))
-	while true do
-		local conn = assert (sched.yield (srv:accept ()))
-		sched.add_thread (function ()
-			handle_client (conn)
-		end)
-	end
-end
-
-function handle_client (conn)
+local function handle_client (conn)
 	local ln
 	repeat
 		ln = assert (sched.yield (conn:read ("*l")))
@@ -21,6 +11,17 @@ function handle_client (conn)
 		print (ln)
 	until ln == "quit"
 	conn:close()
+end
+
+local function do_listen ()
+	sched.add_helpers ("listeners", 4)
+	local srv = assert (nb_tcp.newserver (8080))
+	while true do
+		local conn = assert (sched.yield (srv:accept ()))
+		sched.add_thread (function ()
+			handle_client (conn)
+		end, "listeners")
+	end
 end
 
 sched.add_thread (do_listen)
