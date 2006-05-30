@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.11 2006-05-27 18:51:44 jguerra Exp $
+ * $Id: helper.c,v 1.12 2006-05-30 17:57:29 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -77,6 +77,7 @@ typedef struct thread_t {
 	pthread_t pth;
 	queue_t *in;
 	queue_t *out;
+	int ref_in, ref_out;
 	task_t *task;
 	int signal;
 } thread_t;
@@ -498,8 +499,15 @@ static int new_thread (lua_State *L) {
 	thread_t *thrd = (thread_t *)lua_newuserdata (L, sizeof (thread_t));
 	thrd->in = in_q;
 	thrd->out = out_q;
+	
+	lua_pushvalue (L, 1);
+	thrd->ref_in = luaL_ref (L, LUA_REGISTRYINDEX);
+	lua_pushvalue (L, 2);
+	thrd->ref_out = luaL_ref (L, LUA_REGISTRYINDEX);
+	
 	thrd->task = NULL;
 	thrd->signal = 0;
+	
 	ret = pthread_create (&thrd->pth, NULL, thread_work, thrd);
 	if (ret)
 		luaL_error (L, "error %d (\"%s\") creating helper thread", ret, strerror (ret));
@@ -510,6 +518,18 @@ static int new_thread (lua_State *L) {
 	return 1;
 }
 
+
+/*
+ * thread:queues ()
+ */
+static int thread_queues (lua_State *L) {
+	thread_t *thrd = check_thread (L, 1);
+	
+	lua_rawgeti (L, LUA_REGISTRYINDEX, thrd->ref_in);
+	lua_rawgeti (L, LUA_REGISTRYINDEX, thrd->ref_out);
+	
+	return 2;
+}
 
 /*
  * thread:currenttask ()
@@ -541,6 +561,9 @@ static int thread_gc (lua_State *L) {
 	if (ret)
 		luaL_error (L, "error %d (\"%s\") joining helper thread", ret, strerror (ret));
 	
+	luaL_unref (L, LUA_REGISTRYINDEX, thrd->ref_in);
+	luaL_unref (L, LUA_REGISTRYINDEX, thrd->ref_out);
+	
 	return 0;
 }
 
@@ -553,7 +576,8 @@ static const struct luaL_reg queue_meths [] = {
 	{NULL, NULL}
 };
 static const struct luaL_reg thread_meths [] = {
-	{"currenttask", currenttask },
+	{"currenttask", currenttask},
+	{"queues", thread_queues},
 	{"__gc", thread_gc},
 	{NULL, NULL}
 };
