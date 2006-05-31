@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: nb_tcp.c,v 1.4 2006-05-30 18:02:14 jguerra Exp $
+ * $Id: nb_tcp.c,v 1.5 2006-05-31 01:49:25 jguerra Exp $
  */
 
 
@@ -333,6 +333,7 @@ static int serv_accept_prepare (lua_State *L, void **udata) {
 	ud->sp = *sp;
 	ud->err = 0;
 	memset (&ud->new, 0, sizeof (ud->new));
+	pipe_init (&ud->new.r, 0);
 	
 	return 0;
 }
@@ -470,6 +471,7 @@ static int tcpread_prepare (lua_State *L, void **udata) {
 	*udata = ud;
 	
 	ud->str = tcps;
+	ud->kind = RK_NULL;
 	ud->size = 0;
 	ud->err = 0;
 	
@@ -512,11 +514,11 @@ static int tcpread_work (void *udata) {
 				char *cp;
 				ssize_t r = 0;
 				
-				if (pipe_spaceleft (p) ==0)
-					pipe_makespace (p, 1024);
-				cp = p->head;
-				
 				while (1) {
+					if (pipe_spaceleft (p) ==0)
+						pipe_makespace (p, 1024);
+					cp = p->head;
+				
 					while (*cp != '\r' && *cp != '\n' && cp < p->tail)
 						cp++;
 					if (cp < p->tail) {
@@ -525,7 +527,7 @@ static int tcpread_work (void *udata) {
 					}
 					
 					r = read (ud->str->fd, p->tail, pipe_spaceleft (p));
-					if (r < 0) {
+					if (r <= 0) {
 						ud->err = errno;
 						return 0;
 					}
@@ -566,6 +568,12 @@ static int tcpread_finish (lua_State *L, void *udata) {
 		return 2;
 	}
 	
+	if (pipe_dataleft (p) <= 0) {
+		lua_pushnil (L);
+		lua_pushliteral (L, "closed");
+		return 2;
+	}
+	
 	switch (ud->kind) {
 		case RK_NULL:
 			lua_pushnil (L);
@@ -574,12 +582,12 @@ static int tcpread_finish (lua_State *L, void *udata) {
 		case RK_LINE:
 			lua_pushlstring (L, p->head, ud->size);
 			p->head += ud->size;
-			if (*p->head == '\n')
+			if (*p->head == '\n' && p->head < p->tail)
 				p->head++;
 			else {
-				if (*p->head == '\r')
+				if (*p->head == '\r' && p->head < p->tail)
 					p->head++;
-				if (*p->head == '\n')
+				if (*p->head == '\n' && p->head < p->tail)
 					p->head++;
 			}
 			break;
