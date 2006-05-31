@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: helper.c,v 1.12 2006-05-30 17:57:29 jguerra Exp $
+ * $Id: helper.c,v 1.13 2006-05-31 01:47:49 jguerra Exp $
  */
 
 #include <stdlib.h>
@@ -431,7 +431,6 @@ static int queue_wait (lua_State *L) {
 	
 	if (lua_isnoneornil (L, 2)) {
 		t = q_wait (q, NULL);
-		lua_pushlightuserdata (L, t);
 		
 	} else {
 		
@@ -446,12 +445,12 @@ static int queue_wait (lua_State *L) {
 		timeradd (&ts, &now, &ts);
 		
 		t = q_wait (q, &ts);
-		if (t)
-			lua_pushlightuserdata (L, t);
-		else
-			return 0;
 	}
-
+	
+	if (!t)
+		return 0;
+	
+	lua_pushlightuserdata (L, t);
 	return 1;
 }
 
