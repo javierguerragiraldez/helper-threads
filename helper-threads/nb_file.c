@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: nb_file.c,v 1.5 2006-03-23 21:06:06 jguerra Exp $
+ * $Id: nb_file.c,v 1.6 2007-07-31 23:53:34 jguerra Exp $
  */
  
 #include <stdlib.h>
@@ -50,6 +50,7 @@ static size_t buffer_resize (buffer_t *b, size_t size) {
 	size_t len = buffer_len (b);
 	
 	if (b->bufsize < size) {
+		/* NOTE: Case where realloc cannot allocate enough memory isn't handled */
 		b->data = realloc (b->data, size);
 		b->end = b->data + len;
 		b->bufsize = size;

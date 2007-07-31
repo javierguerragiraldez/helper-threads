@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: nb_tcp.c,v 1.5 2006-05-31 01:49:25 jguerra Exp $
+ * $Id: nb_tcp.c,v 1.6 2007-07-31 23:53:34 jguerra Exp $
  */
 
 
@@ -180,6 +180,7 @@ static int newserver (lua_State *L) {
 	
 	if (bind (sp->fd, (struct sockaddr *)&sp->myaddr, sizeof (sp->myaddr)) <0 ) {
 		close (sp->fd);
+		free(sp);
 		lua_pushnil (L);
 		lua_pushstring (L, strerror (errno));
 		return 2;
@@ -295,7 +296,11 @@ static int newclient_finish (lua_State *L, void *udata) {
 	
 	if (ud->err) {
 		lua_pushnil (L);
-		lua_pushstring (L, strerror (ud->err));
+		lua_pushstring (L, strerror (err));
+		if(ud->hostname)
+			free(ud->hostname);
+		free(ud);
+
 		return 2;
 	}
 	
@@ -699,7 +704,3 @@ int luaopen_nb_tcp (lua_State *L) {
 	
 	return 1;
 }
-
-
-
-

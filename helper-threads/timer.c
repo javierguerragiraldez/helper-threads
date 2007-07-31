@@ -1,7 +1,7 @@
 /*
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: timer.c,v 1.3 2006-03-13 22:08:55 jguerra Exp $
+ * $Id: timer.c,v 1.4 2007-07-31 23:53:34 jguerra Exp $
  */
 
 #include <sys/time.h>
@@ -50,11 +50,11 @@ static int timer_work (void *udata) {
 
 static int timer_finish (lua_State *L, void *udata) {
 	timer_udata *td = (timer_udata *)udata;
+	int ret = td->ret;
+	free(td);
 	
-	if (td->ret < 0)
-		luaL_error (L, strerror (td->ret));
-	
-	free (td);
+	if (ret < 0)
+		luaL_error (L, strerror (ret));
 	
 	return 0;
 }
@@ -67,7 +67,7 @@ static const task_ops timer_ops = {
 
 
 /*
- * repated ticks timer
+ * repeated ticks timer
  */
 
 typedef struct ticks_udata {
@@ -115,10 +115,10 @@ static int ticks_update (lua_State *L, void *udata) {
 	ticks_udata *td = (ticks_udata *)udata;
 	
 	if (td->end) {
-		if (td->ret < 0)
-			luaL_error (L, strerror (td->ret));
+		int ret = td->ret;
 		free (td);
-		
+		if (ret < 0)
+			luaL_error (L, strerror (ret));
 	} else {
 		if (lua_isnumber (L, 1)) {
 			td->t = lua_tonumber(L, 1);

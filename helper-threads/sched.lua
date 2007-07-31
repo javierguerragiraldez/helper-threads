@@ -1,7 +1,7 @@
 --[[
  * Helper Threads Toolkit
  * (c) 2006 Javier Guerra G.
- * $Id: sched.lua,v 1.13 2006-05-30 18:05:51 jguerra Exp $
+ * $Id: sched.lua,v 1.14 2007-07-31 23:53:34 jguerra Exp $
 --]]
 
 local assert, error, next, unpack = assert, error, next, unpack
@@ -95,7 +95,7 @@ end
 -- any extra arguments are used at helper.update() time
 ---------------------------------------------------------
 function yield (t, ...)
-	return helper.update (coroutine.yield (t), unpack (arg))
+	return helper.update (coroutine.yield (t), ...)
 end
 
 --------------------------------------
@@ -128,7 +128,7 @@ function par_foreach (in_t, f_a, f_b, n_th)
 	local threads = {}
 	
 	for i = 1, n_th do
-		table.insert (threads, helper.newthread (in_q, out_q))
+		threads[#threads + 1] =helper.newthread (in_q, out_q)
 	end
 	
 	while next (in_t, nil) ~= nil or on_q_n > 0 do
