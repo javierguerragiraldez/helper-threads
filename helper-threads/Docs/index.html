@@ -1,7 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html lang="es-pe">
 <head>
-  <!-- $Id: index.html,v 1.6 2006-05-25 14:44:08 jguerra Exp $-->
+  <!-- $Id: index.html,v 1.7 2007-08-25 21:42:53 jguerra Exp $-->
   <meta name="description" content="The Helper Threads Toolkit Homepage" />
   <meta name="keywords"
  content="Lua, Library, Multi-Threading, Threads, Support" />
@@ -474,12 +475,22 @@ to call any function from the <code>helper</code> package; just wrap any task-pr
 function with <code>sched.yield()</code> to block the current Lua thread.
 </p>
 <ul>
-	<li><h4><code>sched.add_thread (f)</code></h4>
-		<p>Adds the function <code>f</code> as a Lua thread. It will be encapsulated in a
-			coroutine and have it's own helper thread and input queue. On each
-			<code>coroutine.yield()</code> it can return a task to be added to the queue,
-			and it'll be resumed when the task is ready to be processed with
-			<code>helper.update()</code>.
+	<li><h4><code>sched.add_helpers (name, n_helpers)</code></h4>
+		<p>Adds <code>n_helpers</code> helper threads waiting on the input queue identified
+			by <code>name</code>, creating it too if needed.
+		</p></li>
+	<li><h4><code>sched.add_thread (f [, name])</code></h4>
+		<p>Add the function <code>f</code> as a Lua thread, encapsulated in a coroutine. If
+			<code>name</code> is given, any task created by this thread is added to the named
+			queue (and executed by the set of threads associated with it); if not, the Lua
+			thread is given it's own input queue and helper thread for exclusive use.
+		</p>
+		<p>To run a task, return it to the scheduler with <code>coroutine.yield()</code>.
+			The scheduler will put it in the appropriate input queue, and when it appears
+			in the output queue (either because it's done or because it has been signalled
+			by the helper thread), returns it to the Lua thread in the <code>coroutine.yield()</code>
+			result; ready to be processed with <code>helper.update()</code>. Look
+			<code>sched.yield()</code> for an easier way to do this.
 		</p></li>
 	<li><h4><code>sched.run ()</code></h4>
 		<p>Main loop; runs the registered Lua threads, dispatching tasks to each one
@@ -554,7 +565,7 @@ function do_listen ()
 		local conn = assert (sched.yield (srv:accept ()))
 		sched.add_thread (function ()
 			handle_client (conn)
-		end)
+		end, "server_helpers")
 	end
 end
 
@@ -569,9 +580,13 @@ function handle_client (conn)
 	conn:close()
 end
 
+sched.add_helpers ("server_helpers", 10)
 sched.add_thread (do_listen)
 sched.run()
 </code></pre>
+
+<p>Note that each connection gets its own Lua thread, but uses the same pool of helpers.
+</p>
 
 <!-- download +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
 <!-- footer +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
